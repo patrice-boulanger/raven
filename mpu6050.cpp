@@ -11,7 +11,6 @@ int16_t accl_x, accl_y, accl_z;
 // gyroscope
 int16_t gyro_x, gyro_y, gyro_z;
 double gyro_calibration_x, gyro_calibration_y, gyro_calibration_z;
-
 // temperature
 int16_t temp;
 

@@ -54,7 +54,7 @@ void loop(void)
 	MPU6050_update();
 	BMP180_update();
 
-	// Update the LED
+      	// Update the LED
 	LED_update();
 
 #ifdef RAVEN_DEBUG
