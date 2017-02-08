@@ -41,8 +41,6 @@ void LED_update()
 	unsigned long now = millis();
 	
 	if (now - tstamp >= LED_INTRVL) {
-		pos = (pos + 1) % led_sz;
-
 		char c = led_string[pos];
 
 		if (c == '_')
@@ -51,5 +49,7 @@ void LED_update()
 			digitalWrite(LED_BUILTIN, HIGH);
 
 		tstamp = now;
+		
+		pos = (pos + 1) % led_sz;
 	}
 }
