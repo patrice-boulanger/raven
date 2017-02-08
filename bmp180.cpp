@@ -168,5 +168,5 @@ void BMP180_update(void)
 	if (P0 != 0) 
 		rel_alt = get_altitude(pressure, P0);
 	else
-		rel_alt = 0;
+		rel_alt = abs_alt;
 }
