@@ -5,6 +5,11 @@
 #include "mpu6050.h"
 #include "bmp180.h"
 
+#ifdef RAVEN_DEBUG
+// Statistics
+uint32_t main_loop_iter = 0, main_loop_time = 0;
+#endif
+
 /*
  * Global setup 
  */
@@ -41,6 +46,9 @@ void setup(void)
  */
 void loop(void)
 {
+#ifdef RAVEN_DEBUG
+	unsigned long start = millis();
+#endif
 	// Update sensors	
 	HMC5883L_update();
 	MPU6050_update();
@@ -48,6 +56,21 @@ void loop(void)
 
 	// Update the LED
 	LED_update();
+
+#ifdef RAVEN_DEBUG
+	main_loop_time += millis() - start;
+	main_loop_iter ++;
+
+	if (main_loop_iter && main_loop_iter % 100 == 0) {
+		double avg = main_loop_time / main_loop_iter;
+		
+		Serial.print("DEBUG: Main loop stats ");
+		Serial.print(avg, 2);
+		Serial.print(" ms avg. ");
+		Serial.print(1/avg, 2);
+		Serial.println(" iter/s");
+	}
+#endif
 	
 	delay(30);
 }
