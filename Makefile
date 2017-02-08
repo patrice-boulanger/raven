@@ -11,7 +11,7 @@ TARGET = raven.ino
 # Use 'make show_boards' to list supported boards 
 BOARD_TAG = mini328
 # Change to port used
-ARDUINO_PORT = /dev/ttyACM0  
+ARDUINO_PORT = /dev/ttyUSB0
 
 # Can add Arduino libraries. Example:
 ARDUINO_LIBS = Wire

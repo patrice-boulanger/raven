@@ -4,6 +4,15 @@
 // I2C module address
 #define BMP180_ADDR 0x77
 
+#define BMP180_REG_CONTROL 0xF4
+#define BMP180_REG_RESULT 0xF6
+
+#define BMP180_COMMAND_TEMPERATURE 0x2E
+#define BMP180_COMMAND_PRESSURE0 0x34
+#define BMP180_COMMAND_PRESSURE1 0x74
+#define BMP180_COMMAND_PRESSURE2 0xB4
+#define BMP180_COMMAND_PRESSURE3 0xF4
+
 // Sensor resolution
 // Ultra Low Power       OSS = 0, OSD =  5ms
 #define BMP180_RES_ULTRA_LOW  0

@@ -3,18 +3,19 @@
 #include <math.h>
 #include "bmp180.h"
 
-int16_t  ac1, ac2, ac3, b1, b2, mb, mc, md; // Store sensor PROM values from BMP180
-uint16_t ac4, ac5, ac6;
+int ac1, ac2, ac3, vb1, vb2, mb, mc, md;
+unsigned int ac4, ac5, ac6; 
+double c5, c6, x0, x1, x2, y0, y1, y2, p0, p1, p2;
 
-// oversampling setting & oversampling delay
-uint8_t oss, osd;
+// oversampling settings
+uint8_t osd, cmd_pressure;
 
 // temperature in celsius degrees
 float deg_celsius;
-// initial & relative pressure in mbar
-float P0, pressure;
+// relative pressure in mbar
+float pressure_mbar;
 // absolute & relative altitude
-float abs_alt, rel_alt;
+double abs_alt, rel_alt;
 
 uint16_t read_2(uint8_t code)
 {
@@ -25,148 +26,136 @@ uint16_t read_2(uint8_t code)
 	Wire.endTransmission();
 
 	Wire.requestFrom(BMP180_ADDR, 2);
-	if(Wire.available() >= 2) {
-		value = (Wire.read() << 8) | Wire.read();
-	}
-
+  while(Wire.available() < 2)
+    ;
+ 
+  value = (Wire.read() << 8) | Wire.read();
+  
 	return value;
 }
 
-int32_t read_pressure()
+void read_bytes(uint8_t *val, int len)
 {
-	int32_t P;
+  Wire.beginTransmission(BMP180_ADDR);
+  Wire.write(val[0]);
+  Wire.endTransmission();
 
-	Wire.beginTransmission(BMP180_ADDR);
-	Wire.write(0xf4);
-	Wire.write(0x34 + (oss << 6));
-	Wire.endTransmission();
-	
-	delay(osd);
+  Wire.requestFrom(BMP180_ADDR, len);
+  while(Wire.available() < len)
+    ;
 
-	Wire.beginTransmission(BMP180_ADDR);
-	Wire.write(0xf6);
-	Wire.endTransmission();
-	
-	Wire.requestFrom(BMP180_ADDR, 3);
-	if(Wire.available() >= 3)
-		P = (((int32_t)Wire.read() << 16) | ((int32_t)Wire.read() << 8) | ((int32_t)Wire.read())) >> (8 - oss);
-
-	return P;                             
+  for(int x = 0; x < len; x ++)
+      val[x] = Wire.read();
 }
 
-/*
- * Returns pressure in mbar 
- */
-float get_pressure(int32_t b5)
+void write_bytes(uint8_t *val, int len)
 {
-	int32_t x1, x2, x3, b3, b6, p, UP;
-	uint32_t b4, b7;
-
-	UP = read_pressure();
-
-	b6 = b5 - 4000;
-	x1 = (b2 * (b6 * b6 >> 12)) >> 11;
-	x2 = ac2 * b6 >> 11;
-	x3 = x1 + x2;
-	b3 = (((ac1 * 4 + x3) << oss) + 2) >> 2;
-	x1 = ac3 * b6 >> 13;
-	x2 = (b1 * (b6 * b6 >> 12)) >> 16;
-	x3 = ((x1 + x2) + 2) >> 2;
-	b4 = (ac4 * (uint32_t)(x3 + 32768)) >> 15;
-	b7 = ((uint32_t)UP - b3) * (50000 >> oss);
-	p = b7 < 0x80000000 ? ((b7 << 1) / b4) : ((b7 / b4) << 1);
-	x1 = (p >> 8) * (p >> 8);
-	x1 = (x1 * 3038) >> 16;
-	x2 = (-7357 * p) >> 16;
-	
-	return (p + ((x1 + x2 + 3791) >> 4)) / 100.0f; 
-}
-
-int32_t get_temperature()
-{
-	int32_t x1, x2, b5, UT;
-
-	Wire.beginTransmission(BMP180_ADDR);
-	Wire.write(0xf4);
-	Wire.write(0x2e);
-	Wire.endTransmission();
-	
-	delay(5);
-
-	UT = read_2(0xf6);
-
-	// Real temperature
-	x1 = (UT - (int32_t)ac6) * (int32_t)ac5 >> 15;
-	x2 = ((int32_t)mc << 11) / (x1 + (int32_t)md);
-	b5 = x1 + x2;
-
-	// Returns not-compensated temperature
-	return b5;
-}
-
-float get_altitude(float p, float ref)
-{
-	return 44330.0 * (1 - pow(p/ref, 1/5.255));
-}
-
-void BMP180_set_baseline(void)
-{
-	int32_t T = get_temperature();
-	P0 = get_pressure(T);
+  Wire.beginTransmission(BMP180_ADDR);
+  Wire.write(val, len);
+  Wire.endTransmission();
 }
 
 void BMP180_init(uint8_t resolution)
 {
+  double c3, c4, b1;
+  
 	switch(resolution) {
 	case BMP180_RES_ULTRA_LOW:
-		oss = 0;
+		cmd_pressure = BMP180_COMMAND_PRESSURE0;
 		osd = 5;
 		break;
 
 	case BMP180_RES_STANDARD:
-		oss = 1;
+		cmd_pressure = BMP180_COMMAND_PRESSURE1;
 		osd = 8;
 		break;
 
 	case BMP180_RES_HIGH:
-		oss = 2;
+		cmd_pressure = BMP180_COMMAND_PRESSURE2;
 		osd = 14;
 		break;
 
 	case BMP180_RES_ULTRA_HIGH:
 	default:
-		oss = 3;
+		cmd_pressure = BMP180_COMMAND_PRESSURE3;
 		osd = 26;
 		break;
 	}
-		
+
+  // get calibration data from device
 	ac1 = read_2(0xAA);
 	ac2 = read_2(0xAC);
 	ac3 = read_2(0xAE);
 	ac4 = read_2(0xB0);
 	ac5 = read_2(0xB2);
 	ac6 = read_2(0xB4);
-	b1  = read_2(0xB6);
-	b2  = read_2(0xB8);
+	vb1 = read_2(0xB6);
+	vb2 = read_2(0xB8);
 	mb  = read_2(0xBA);
 	mc  = read_2(0xBC);
 	md  = read_2(0xBE);
 
-	BMP180_set_baseline();
+  // get floating-point polynominals
+  c3 = 160.0 * pow(2,-15) * ac3;
+  c4 = pow(10,-3) * pow(2,-15) * ac4;
+  b1 = pow(160,2) * pow(2,-30) * vb1;
+  c5 = (pow(2,-15) / 160) * ac5;
+  c6 = ac6;
+  mc = (pow(2,11) / pow(160,2)) * mc;
+  md = md / 160.0;
+  x0 = ac1;
+  x1 = 160.0 * pow(2,-13) * ac2;
+  x2 = pow(160,2) * pow(2,-25) * vb2;
+  y0 = c4 * pow(2,15);
+  y1 = c4 * c3;
+  y2 = c4 * b1;
+  p0 = (3791.0 - 8.0) / 1600.0;
+  p1 = 1.0 - 7357.0 * pow(2,-20);
+  p2 = 3038.0 * 100.0 * pow(2,-36);
 }
 
 void BMP180_update(void)
 {
-	int32_t T = get_temperature();
-	// Convert to Celsius degrees
-	deg_celsius  = (T + 8) >> 4;
-	deg_celsius = deg_celsius / 10.0;
-	
-	pressure = get_pressure(T);
-	// Comput altitudes
-	abs_alt = get_altitude(pressure, 1013.25);
-	if (P0 != 0) 
-		rel_alt = get_altitude(pressure, P0);
-	else
-		rel_alt = abs_alt;
+  uint8_t data[3];
+
+  // Get temperature
+  data[0] = BMP180_REG_CONTROL;
+  data[1] = BMP180_COMMAND_TEMPERATURE;
+  write_bytes(data, 2);
+  
+  delay(osd);
+  
+  data[0] = BMP180_REG_RESULT;
+  read_bytes(data, 2);
+
+  double tu = (data[0] * 256.0) + data[1], a = c5 * (tu - c6);
+  deg_celsius = a + (mc / (a + md));
+
+  // Get pressure 
+  data[0] = BMP180_REG_CONTROL;
+  data[1] = cmd_pressure;
+  write_bytes(data, 2);
+
+  delay(osd);
+  
+  data[0] = BMP180_REG_RESULT;
+  read_bytes(data, 3);
+  
+  double pu = (data[0] * 256.0) + data[1] + (data[2]/256.0),
+    s = deg_celsius - 25.0,
+    x = (x2 * pow(s, 2)) + (x1 * s) + x0,
+    y = (y2 * pow(s, 2)) + (y1 * s) + y0,
+    z = (pu - x) / y;
+
+  pressure_mbar = (p2 * pow(z, 2)) + (p1 * z) + p0;
+  
+  abs_alt = 44330.0 * (1 - pow(1013.25 / pressure_mbar, 1 / 5.255));
+  
+  Serial.print("BMP180: ");
+  Serial.print(deg_celsius);
+  Serial.print(" deg. ");
+  Serial.print(pressure_mbar);
+  Serial.print(" mbar ");
+  Serial.print(abs_alt);
+  Serial.println(" m");
 }

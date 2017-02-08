@@ -5,6 +5,8 @@
 #include "mpu6050.h"
 #include "bmp180.h"
 
+#define RAVEN_DEBUG
+
 #ifdef RAVEN_DEBUG
 // Statistics
 uint32_t main_loop_iter = 0, main_loop_time = 0;
@@ -16,6 +18,8 @@ uint32_t main_loop_iter = 0, main_loop_time = 0;
 void setup(void)
 {
 	Serial.begin(9600);
+
+  Serial.println("raven v0.1");
 
 	// Initialize onboard LED and switch it on
 	LED_init();
@@ -33,7 +37,7 @@ void setup(void)
 	HMC5883L_init(0x70, 0xA0);
 	// Setup accelerometer/gyroscope & proceed to calibration
 	MPU6050_init();
-	MPU6050_calibrate();		
+	//MPU6050_calibrate();		
 	
 	// switch off the LED
  	LED_set_sequence(0);
@@ -49,12 +53,13 @@ void loop(void)
 #ifdef RAVEN_DEBUG
 	unsigned long start = millis();
 #endif
+
 	// Update sensors	
 	HMC5883L_update();
 	MPU6050_update();
 	BMP180_update();
 
-      	// Update the LED
+  // Update the LED
 	LED_update();
 
 #ifdef RAVEN_DEBUG
@@ -67,12 +72,10 @@ void loop(void)
 		Serial.print("DEBUG: Main loop stats ");
 		Serial.print(avg, 2);
 		Serial.print(" ms avg. ");
-		Serial.print(1/avg, 2);
+		Serial.print(1000/avg, 2);
 		Serial.println(" iter/s");
 	}
 #endif
-	
-	delay(30);
 }
 
 

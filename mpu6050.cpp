@@ -39,7 +39,7 @@ void MPU6050_calibrate(void)
 		gyro_calibration_y += gyro_y;
 		gyro_calibration_z += gyro_z;
 
-		delay(5);
+		delay(3);
 		LED_update();
 	}
 
@@ -66,5 +66,5 @@ void MPU6050_update(void)
 	gyro_y = Wire.read() << 8 | Wire.read();  // 0x45 (GYRO_YOUT_H) & 0x46 (GYRO_YOUT_L)
 	gyro_z = Wire.read() << 8 | Wire.read();  // 0x47 (GYRO_ZOUT_H) & 0x48 (GYRO_ZOUT_L)
 
-	temp = temp / 340.00 + 36.53; // convert to celsius
+	temp = temp / 340.00 + 36.53; // convert to celsius  
 }
