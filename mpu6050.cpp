@@ -14,6 +14,12 @@ void MPU6050_init()
         Wire.write(0x6B);  // PWR_MGMT_1 register
 	Wire.write(0);     // wakes up the module 
 	Wire.endTransmission(true);
+
+	Wire.beginTransmission(MPU6050_ADDR); 
+	Wire.write(0x1B);  // GYRO_CONFIG register
+	Wire.write(0x08);  // set 500dps full scale
+	Wire.endTransmission();
+	
 }
 
 void MPU6050_update(void)
