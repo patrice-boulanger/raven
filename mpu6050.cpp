@@ -1,10 +1,17 @@
+#include <Arduino.h>
 #include <Wire.h>
+
+#include "led.h"
 #include "mpu6050.h"
+
+#define CALIBRATION_ITER 1500
 
 // acceleration
 int16_t accl_x, accl_y, accl_z;
 // gyroscope
 int16_t gyro_x, gyro_y, gyro_z;
+double gyro_calibration_x, gyro_calibration_y, gyro_calibration_z;
+
 // temperature
 int16_t temp;
 
@@ -22,6 +29,26 @@ void MPU6050_init()
 	
 }
 
+void MPU6050_calibrate(void)
+{
+	LED_set_sequence("_____xx");
+	
+	for(int i = 0; i < CALIBRATION_ITER; i ++) {
+		MPU6050_update();
+		
+		gyro_calibration_x += gyro_x;
+		gyro_calibration_y += gyro_y;
+		gyro_calibration_z += gyro_z;
+
+		delay(5);
+		LED_update();
+	}
+
+	gyro_calibration_x /= CALIBRATION_ITER;
+	gyro_calibration_y /= CALIBRATION_ITER;
+	gyro_calibration_z /= CALIBRATION_ITER;
+}
+
 void MPU6050_update(void)
 {
 	Wire.beginTransmission(MPU6050_ADDR);	
@@ -29,6 +56,9 @@ void MPU6050_update(void)
 	Wire.endTransmission(false);
 	
 	Wire.requestFrom(MPU6050_ADDR, 14, true); // request a total of 14 registers
+	while(Wire.available() < 14)
+		;
+	
 	accl_x = Wire.read() << 8 | Wire.read();  // 0x3B (ACCEL_XOUT_H) & 0x3C (ACCEL_XOUT_L)
 	accl_y = Wire.read() << 8 | Wire.read();  // 0x3D (ACCEL_YOUT_H) & 0x3E (ACCEL_YOUT_L)
 	accl_z = Wire.read() << 8 | Wire.read();  // 0x3F (ACCEL_ZOUT_H) & 0x40 (ACCEL_ZOUT_L)

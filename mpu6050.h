@@ -14,4 +14,9 @@ void MPU6050_init();
  */
 void MPU6050_update(void);
 
+/*
+ * Calibrate the gyroscope
+ */
+void MPU6050_calibrate(void);
+
 #endif // _RAVEN_MPU6050_H
