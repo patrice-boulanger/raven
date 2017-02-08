@@ -34,7 +34,8 @@ void HMC5883L_update(void)
   //Read data from each axis, 2 registers per axis
   Wire.requestFrom(HMC5883L_ADDR, 6);
   
-  while(Wire.available() < 6);
+  while(Wire.available() < 6)
+    ;
   
   X_axis = Wire.read() << 8; // X msb
   X_axis |= Wire.read();     // X lsb
