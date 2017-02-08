@@ -17,6 +17,8 @@ void setup(void)
 	
 	// Initialize I2C bus
 	Wire.begin();
+	// I2C clock speed to 400kHz
+	TWBR = 12; 
 	
 	// Setup compas w/ 8x averaging, 15Hz measurement rate and gain of 5
 	HMC5883L_init(0x70, 0xA0);
@@ -25,8 +27,9 @@ void setup(void)
 	// Setup barometer w/ high precision
 	BMP180_init(BMP180_RES_HIGH);
 
-	delay(1000);
 	LED_set_sequence(0);
+
+	delay(500);
 }
 
 /*
