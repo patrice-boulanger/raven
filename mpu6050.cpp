@@ -94,11 +94,11 @@ void MPU6050_get_angles(float *pitch, float *roll, float dt)
 	int forceMagnitudeApprox = abs(accl_x) + abs(accl_y) + abs(accl_z);
 	if (forceMagnitudeApprox > 8192 && forceMagnitudeApprox < 32768) {
 		// turning around the X axis results in a vector on the Y-axis
-		float pitchAcc = atan2f((float)accl_y, (float)accl_z) * 180 / M_PI;
+		float pitchAcc = atan2f((float)accl_y, (float)accl_z);
 		*pitch = *pitch * 0.98 + pitchAcc * 0.02;
 
 		// turning around the Y axis results in a vector on the X-axis
-		float rollAcc = atan2f((float)accl_x, (float)accl_z) * 180 / M_PI;
+		float rollAcc = atan2f((float)accl_x, (float)accl_z);
 		*roll = *roll * 0.98 + rollAcc * 0.02;
 	}
 }

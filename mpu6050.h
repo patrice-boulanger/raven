@@ -22,7 +22,7 @@ void MPU6050_calibrate(void);
 void MPU6050_update(void);
 
 /*
- * Computer pitch and roll angles (in degrees) using a complementary filter
+ * Computer pitch and roll angles (radians) using a complementary filter
  */
 void MPU6050_get_angles(float *pitch, float *roll, float dt);
 
