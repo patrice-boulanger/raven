@@ -3,8 +3,8 @@
 
 // I2C module address
 #define MPU6050_ADDR 0x68
-
-#define GYRO_SENSITIVITY 65.536
+// Full scale range
+#define GYRO_FULL_SCALE_RANGE 0x08
 
 /*
  * Initialization
@@ -22,8 +22,8 @@ void MPU6050_calibrate(void);
 void MPU6050_update(void);
 
 /*
- * Computer pitch and roll angles (radians) using a complementary filter
+ * Computer angles on x/Y axis (degrees) using a complementary filter
  */
-void MPU6050_get_angles(float *pitch, float *roll, float dt);
+void MPU6050_get_angles(float *compensated_angle_x, float *compensated_angle_y);
 
 #endif // _RAVEN_MPU6050_H

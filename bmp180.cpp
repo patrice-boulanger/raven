@@ -150,7 +150,7 @@ void BMP180_update(void)
   pressure_mbar = (p2 * pow(z, 2)) + (p1 * z) + p0;
   
   abs_alt = 44330.0 * (1 - pow(1013.25 / pressure_mbar, 1 / 5.255));
-  
+/*  
   Serial.print("BMP180: ");
   Serial.print(deg_celsius);
   Serial.print(" deg. ");
@@ -158,4 +158,5 @@ void BMP180_update(void)
   Serial.print(" mbar ");
   Serial.print(abs_alt);
   Serial.println(" m");
+  */
 }

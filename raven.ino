@@ -6,9 +6,7 @@
 #include "bmp180.h"
 
 // Compensated pitch/roll/heading angles (in radians)
-float pitch_angle, roll_angle, heading_angle;
-// main loop previous timer
-unsigned long previous;
+float x_angle, y_angle, z_angle;
 
 /*
  * Global setup 
@@ -25,23 +23,25 @@ void setup(void)
 
 	// Initialize I2C bus
 	Wire.begin();
-	// I2C clock speed to 400kHz
-	TWBR = 12; 
+#if ARDUINO >= 157
+  Wire.setClock(400000UL); // Set I2C frequency to 400kHz
+#else
+  TWBR = ((F_CPU / 400000UL) - 16) / 2; // Set I2C frequency to 400kHz
+#endif 
 
 	// Setup barometer w/ high precision
 	BMP180_init(BMP180_RES_HIGH);
 	// Setup compas w/ 8x averaging, 15Hz measurement rate and gain of 5
 	HMC5883L_init(0x70, 0xA0);
-	// Setup accelerometer/gyroscope & proceed to calibration
+	// Setup accelerometer/gyroscope & calibrate
 	MPU6050_init();
 	MPU6050_calibrate();		
 
 	// Iniitialize global variables for safety
-	pitch_angle = roll_angle = 0.0f;
-	previous = 0;
+	x_angle = y_angle = z_angle = 0.0f;
 	
 	// switch off the LED
- 	LED_set_sequence(0);
+ 	LED_set_sequence("x_x__________");
 	
 	delay(500);
 }
@@ -51,30 +51,25 @@ void setup(void)
  */
 void loop(void)
 {
-	unsigned long now = millis();
-	
 	// Update sensors
 	MPU6050_update();	
 	HMC5883L_update();
 	BMP180_update();
 
-	float dt = (now - previous) / 1000.0f;
-	MPU6050_get_angles(&pitch_angle, &roll_angle, dt);
-	HMC5883L_get_heading_angle(pitch_angle, roll_angle, &heading_angle);
-	
+	MPU6050_get_angles(&x_angle, &y_angle);
+	HMC5883L_get_heading_angle(x_angle, y_angle, &z_angle);
+  
 	// Update the LED
 	LED_update();
 
-	previous = now;
-
-	Serial.print("dt = ");
-	Serial.print(dt);
-	Serial.print("ms pitch = ");
-	Serial.print(pitch_angle);
-	Serial.print(" roll = ");
-	Serial.print(roll_angle);
+	Serial.print("roll= ");
+	Serial.print(x_angle);
+	Serial.print(" pitch = ");
+	Serial.print(y_angle);
 	Serial.print(" heading = ");
-	Serial.print(heading_angle);
+	Serial.println(z_angle);
+
+  delay(10);
 }
 
 

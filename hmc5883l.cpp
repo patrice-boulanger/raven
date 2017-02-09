@@ -8,8 +8,10 @@
 
 #include "hmc5883l.h"
 
+#define DEG2RAD 0.017453278f
+#define RAD2DEG 57.2957786f
+
 int X_axis, Y_axis, Z_axis;
-double angle;
 
 void HMC5883L_init(uint8_t regA, uint8_t regB)
 {
@@ -45,13 +47,21 @@ void HMC5883L_update(void)
 	Y_axis |= Wire.read();     // Y lsb
 }
 
-void HMC5883L_get_heading_angle(float pitch, float roll, float *heading)
+void HMC5883L_get_heading_angle(float angle_x, float angle_y, float *angle_z)
 {
+  /*
+   * MPU6050 and HMC5883L referentials are not aligned, we need first 
+   * to project the magnetic vector in the MPU referential to match angles.
+   */
+  
+  int xp = -Y_axis, yp = X_axis, zp = Z_axis;
+  float x_rad = angle_x * DEG2RAD, y_rad = angle_y * DEG2RAD;
+   
 	// https://www.pololu.com/file/0J434/LSM303DLH-compass-app-note.pdf
 
 	// equation 2, page 7
-	double xh = X_axis * cos(pitch) + Z_axis * sin(pitch),
-		yh = X_axis * sin(roll) * sin(pitch) + Y_axis * cos(roll) - Z_axis * sin(roll) * cos(pitch);
+	double xh = xp * cos(y_rad) + zp * sin(y_rad),
+		yh = xp * sin(x_rad) * sin(y_rad) + yp * cos(x_rad) - Z_axis * sin(x_rad) * cos(y_rad);
 
 	// equation 13, page 23
 	float psi = 0;
@@ -72,5 +82,5 @@ void HMC5883L_get_heading_angle(float pitch, float roll, float *heading)
 		}
 	}
 
-	*heading = psi;
+	*angle_z = psi * RAD2DEG;
 }
