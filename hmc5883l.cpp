@@ -53,19 +53,23 @@ void HMC5883L_get_heading_angle(float pitch, float roll, float *heading)
 	double xh = X_axis * cos(pitch) + Z_axis * sin(pitch),
 		yh = X_axis * sin(roll) * sin(pitch) + Y_axis * cos(roll) - Z_axis * sin(roll) * cos(pitch);
 
-
 	// equation 13, page 23
-	float psi = atan2(yh, xh);
+	float psi = 0;
 
-	if (xh < 0)
-		psi += M_PI; // + 180 deg
-	else if (xh > 0 && yh <= 0) 
-		psi += 2 * M_PI; // + 360 deg
-	else if (xh == 0) {
+	if (abs(xh) < 0.00001) { // avoid floating point comparison to 0.0f
 		if (yh < 0)
 			psi = M_PI / 2; // = 90 deg
 		else if (yh > 0)
 			psi = 3 * M_PI / 2; // = 270 deg
+	} else {
+		psi = atan2(yh, xh);
+
+		if (xh < 0)
+			psi += M_PI; // + 180 deg
+		else {
+			if (yh <= 0)
+				psi += 2 * M_PI; // + 360 deg
+		}
 	}
 
 	*heading = psi;

@@ -67,13 +67,14 @@ void loop(void)
 
 	previous = now;
 
-	Serial.print("pitch = ");
+	Serial.print("dt = ");
+	Serial.print(dt);
+	Serial.print("ms pitch = ");
 	Serial.print(pitch_angle);
 	Serial.print(" roll = ");
 	Serial.print(roll_angle);
 	Serial.print(" heading = ");
 	Serial.print(heading_angle);
-
 }
 
 
