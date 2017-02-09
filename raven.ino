@@ -5,8 +5,8 @@
 #include "mpu6050.h"
 #include "bmp180.h"
 
-// Compensated pitch/roll angles (in degrees)
-float pitch_angle, roll_angle;
+// Compensated pitch/roll/heading angles (in radians)
+float pitch_angle, roll_angle, heading_angle;
 // main loop previous timer
 unsigned long previous;
 
@@ -53,13 +53,14 @@ void loop(void)
 {
 	unsigned long now = millis();
 	
-	// Update sensors	
+	// Update sensors
+	MPU6050_update();	
 	HMC5883L_update();
-	MPU6050_update();
 	BMP180_update();
 
 	float dt = (now - previous) / 1000.0f;
 	MPU6050_get_angles(&pitch_angle, &roll_angle, dt);
+	HMC5883L_get_heading_angle(pitch_angle, roll_angle, &heading_angle);
 	
 	// Update the LED
 	LED_update();
@@ -69,7 +70,10 @@ void loop(void)
 	Serial.print("pitch = ");
 	Serial.print(pitch_angle);
 	Serial.print(" roll = ");
-	Serial.println(roll_angle);
+	Serial.print(roll_angle);
+	Serial.print(" heading = ");
+	Serial.print(heading_angle);
+
 }
 
 
