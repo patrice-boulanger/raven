@@ -30,26 +30,6 @@ void MPU6050_init()
 	gyro_calibration_x = gyro_calibration_y = gyro_calibration_z = 0.0f;	
 }
 
-void MPU6050_calibrate(void)
-{
-	LED_set_sequence("_____xx");
-	
-	for(int i = 0; i < CALIBRATION_ITER; i ++) {
-		MPU6050_read();
-		
-		gyro_calibration_x += gyro_x;
-		gyro_calibration_y += gyro_y;
-		gyro_calibration_z += gyro_z;
-
-		delay(3);
-		LED_update();
-	}
-
-	gyro_calibration_x /= CALIBRATION_ITER;
-	gyro_calibration_y /= CALIBRATION_ITER;
-	gyro_calibration_z /= CALIBRATION_ITER;
-}
-
 void MPU6050_read(void)
 {
 	Wire.beginTransmission(MPU6050_ADDR);	
@@ -69,6 +49,26 @@ void MPU6050_read(void)
 	gyro_z = Wire.read() << 8 | Wire.read();  // 0x47 (GYRO_ZOUT_H) & 0x48 (GYRO_ZOUT_L)
 
 	temp = temp / 340.00 + 36.53; // convert to celsius  
+}
+
+void MPU6050_calibrate(void)
+{
+	LED_set_sequence("_____xx");
+	
+	for(int i = 0; i < CALIBRATION_ITER; i ++) {
+		MPU6050_read();
+		
+		gyro_calibration_x += gyro_x;
+		gyro_calibration_y += gyro_y;
+		gyro_calibration_z += gyro_z;
+
+		delay(3);
+		LED_update();
+	}
+
+	gyro_calibration_x /= CALIBRATION_ITER;
+	gyro_calibration_y /= CALIBRATION_ITER;
+	gyro_calibration_z /= CALIBRATION_ITER;
 }
 
 void MPU6050_update(void)
