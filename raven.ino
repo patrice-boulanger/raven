@@ -5,12 +5,10 @@
 #include "mpu6050.h"
 #include "bmp180.h"
 
-#define RAVEN_DEBUG
-
-#ifdef RAVEN_DEBUG
-// Statistics
-uint32_t main_loop_iter = 0, main_loop_time = 0;
-#endif
+// Compensated pitch/roll angles (in degrees)
+float pitch_angle, roll_angle;
+// main loop previous timer
+unsigned long previous;
 
 /*
  * Global setup 
@@ -18,8 +16,7 @@ uint32_t main_loop_iter = 0, main_loop_time = 0;
 void setup(void)
 {
 	Serial.begin(9600);
-
-  Serial.println("raven v0.1");
+	Serial.println("raven v0.1");
 
 	// Initialize onboard LED and switch it on
 	LED_init();
@@ -37,7 +34,11 @@ void setup(void)
 	HMC5883L_init(0x70, 0xA0);
 	// Setup accelerometer/gyroscope & proceed to calibration
 	MPU6050_init();
-	//MPU6050_calibrate();		
+	MPU6050_calibrate();		
+
+	// Iniitialize global variables for safety
+	pitch_angle = roll_angle = 0.0f;
+	previous = 0;
 	
 	// switch off the LED
  	LED_set_sequence(0);
@@ -50,32 +51,25 @@ void setup(void)
  */
 void loop(void)
 {
-#ifdef RAVEN_DEBUG
-	unsigned long start = millis();
-#endif
-
+	unsigned long now = millis();
+	
 	// Update sensors	
 	HMC5883L_update();
 	MPU6050_update();
 	BMP180_update();
 
-  // Update the LED
+	float dt = (now - previous) / 1000.0f;
+	MPU6050_get_angles(&pitch_angle, &roll_angle, dt);
+	
+	// Update the LED
 	LED_update();
 
-#ifdef RAVEN_DEBUG
-	main_loop_time += millis() - start;
-	main_loop_iter ++;
+	previous = now;
 
-	if (main_loop_iter && main_loop_iter % 100 == 0) {
-		double avg = main_loop_time / main_loop_iter;
-		
-		Serial.print("DEBUG: Main loop stats ");
-		Serial.print(avg, 2);
-		Serial.print(" ms avg. ");
-		Serial.print(1000/avg, 2);
-		Serial.println(" iter/s");
-	}
-#endif
+	Serial.print("pitch = ");
+	Serial.print(pitch_angle);
+	Serial.print(" roll = ");
+	Serial.println(roll_angle);
 }
 
 

@@ -19,5 +19,6 @@ ARDUINO_LIBS = Wire
 ARDUINO_DIR  = /usr/share/arduino
 AVR_TOOLS_PATH = /usr/bin
 
-CPPFLAGS += -DRAVEN_DEBUG
+#CPPFLAGS += -DRAVEN_DEBUG
+
 include /usr/share/arduino/Arduino.mk
