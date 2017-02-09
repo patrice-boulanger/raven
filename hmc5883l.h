@@ -24,6 +24,9 @@ void HMC5883L_init(uint8_t regA, uint8_t regB);
  */
 void HMC5883L_update(void);
 
-
+/*
+ * Returns the tilt compensated heading angle (in radians)
+ */
+void HMC5883L_get_heading_angle(float pitch, float roll, float *heading);
 
 #endif // _RAVEN_HMC5883L_H
