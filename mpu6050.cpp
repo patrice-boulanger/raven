@@ -22,8 +22,8 @@ uint32_t timer;
 
 void MPU6050_init()
 {
-  Wire.beginTransmission(MPU6050_ADDR);
-  Wire.write(0x6B);  // PWR_MGMT_1 register
+	Wire.beginTransmission(MPU6050_ADDR);
+	Wire.write(0x6B);  // PWR_MGMT_1 register
 	Wire.write(0);     // wakes up the module 
 	Wire.endTransmission(true);
 
@@ -32,11 +32,11 @@ void MPU6050_init()
 	Wire.write(GYRO_FULL_SCALE_RANGE);  // set 500dps full scale
 	Wire.endTransmission();
 
-  accl_calibration_x = accl_calibration_y = 0.0f;
-  gyro_calibration_x = gyro_calibration_y = gyro_calibration_z = 0.0f;
-
-  //start a timer
-  timer = micros();
+	accl_calibration_x = accl_calibration_y = 0.0f;
+	gyro_calibration_x = gyro_calibration_y = gyro_calibration_z = 0.0f;
+	
+	//start timer
+	timer = micros();
 }
 
 void MPU6050_read(void)
@@ -67,8 +67,8 @@ void MPU6050_calibrate(void)
 	for(int i = 0; i < CALIBRATION_ITER; i ++) {
 		MPU6050_read();
 
-    accl_calibration_x += accl_x;
-    accl_calibration_y += accl_y;
+		accl_calibration_x += accl_x;
+		accl_calibration_y += accl_y;
     
 		gyro_calibration_x += gyro_x;
 		gyro_calibration_y += gyro_y;
@@ -78,9 +78,9 @@ void MPU6050_calibrate(void)
 		LED_update();
 	}
 
-  accl_calibration_x /= CALIBRATION_ITER;
-  accl_calibration_y /= CALIBRATION_ITER;
-
+	accl_calibration_x /= CALIBRATION_ITER;
+	accl_calibration_y /= CALIBRATION_ITER;
+	
 	gyro_calibration_x /= CALIBRATION_ITER;
 	gyro_calibration_y /= CALIBRATION_ITER;
 	gyro_calibration_z /= CALIBRATION_ITER;
@@ -91,8 +91,8 @@ void MPU6050_update(void)
 	MPU6050_read();
 	
 	// compensate w/ calibration data
-  accl_x -= accl_calibration_x;
-  accl_y -= accl_calibration_y;
+	accl_x -= accl_calibration_x;
+	accl_y -= accl_calibration_y;
 
 	gyro_x -= gyro_calibration_x;
 	gyro_y -= gyro_calibration_y;
@@ -101,22 +101,22 @@ void MPU6050_update(void)
 
 void MPU6050_get_angles(float *compensated_angle_x, float *compensated_angle_y)
 {
-  double dt = (double)(micros() - timer) / 1000000.0;
-  timer = micros();
+	double dt = (double)(micros() - timer) / 1000000.0;
+	timer = micros();
 
-  // Compute the orientation of the accelerometer relative to the earth (convert from radians to degrees)
-  // Use this data to correct any cumulative errors in the orientation that the gyroscope develops.
-  double roll = atan2(accl_y, accl_z) * RAD2DEG;
-  double pitch = atan2(-accl_x, accl_z) * RAD2DEG;
-
-  double gyro_x_rate = gyro_x / 131.0;
-  double gyro_y_rate = gyro_y / 131.0;
-  
-  //This filter calculates the angle based MOSTLY on integrating the angular velocity to an angular displacement.
-  //dt, recall, is the time between gathering data from the MPU6050.  We'll pretend that the 
-  //angular velocity has remained constant over the time dt, and multiply angular velocity by 
-  //time to get displacement.
-  //The filter then adds a small correcting factor from the accelerometer ("roll" or "pitch"), so the gyroscope knows which way is down. 
-  *compensated_angle_x = 0.96 * (*compensated_angle_x + gyro_x_rate * dt) + 0.04 * roll; 
-  *compensated_angle_y = 0.96 * (*compensated_angle_y + gyro_y_rate * dt) + 0.04 * pitch; 
+	// Compute the orientation of the accelerometer relative to the earth (convert from radians to degrees)
+	// Use this data to correct any cumulative errors in the orientation that the gyroscope develops.
+	double roll = atan2(accl_y, accl_z) * RAD2DEG;
+	double pitch = atan2(-accl_x, accl_z) * RAD2DEG;
+	
+	double gyro_x_rate = gyro_x / 131.0;
+	double gyro_y_rate = gyro_y / 131.0;
+	
+	//This filter calculates the angle based MOSTLY on integrating the angular velocity to an angular displacement.
+	//dt, recall, is the time between gathering data from the MPU6050.  We'll pretend that the 
+	//angular velocity has remained constant over the time dt, and multiply angular velocity by 
+	//time to get displacement.
+	//The filter then adds a small correcting factor from the accelerometer ("roll" or "pitch"), so the gyroscope knows which way is down. 
+	*compensated_angle_x = 0.96 * (*compensated_angle_x + gyro_x_rate * dt) + 0.04 * roll; 
+	*compensated_angle_y = 0.96 * (*compensated_angle_y + gyro_y_rate * dt) + 0.04 * pitch; 
 }

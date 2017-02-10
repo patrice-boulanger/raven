@@ -49,23 +49,23 @@ void HMC5883L_update(void)
 
 void HMC5883L_get_heading_angle(float angle_x, float angle_y, float *angle_z)
 {
-  /*
-   * MPU6050 and HMC5883L referentials are not aligned, we need first 
-   * to project the magnetic vector in the MPU referential to match angles.
-   */
-  
-  int xp = -Y_axis, yp = X_axis, zp = Z_axis;
-  float x_rad = angle_x * DEG2RAD, y_rad = angle_y * DEG2RAD;
-   
+	/*
+	 * MPU6050 and HMC5883L referentials are not aligned, we need first 
+	 * to project the magnetic vector in the MPU referential to match angles.
+	 */
+	
+	int xp = -Y_axis, yp = X_axis, zp = Z_axis;
+	float x_rad = angle_x * DEG2RAD, y_rad = angle_y * DEG2RAD;
+	
 	// https://www.pololu.com/file/0J434/LSM303DLH-compass-app-note.pdf
-
+	
 	// equation 2, page 7
 	double xh = xp * cos(y_rad) + zp * sin(y_rad),
 		yh = xp * sin(x_rad) * sin(y_rad) + yp * cos(x_rad) - Z_axis * sin(x_rad) * cos(y_rad);
-
+	
 	// equation 13, page 23
 	float psi = 0;
-
+	
 	if (abs(xh) < 0.00001) { // avoid floating point comparison to 0.0f
 		if (yh < 0)
 			psi = M_PI / 2; // = 90 deg

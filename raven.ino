@@ -5,7 +5,7 @@
 #include "mpu6050.h"
 #include "bmp180.h"
 
-// Compensated pitch/roll/heading angles (in radians)
+// Attitude based on compensated angles, the base referential is those of MPU6050
 float x_angle, y_angle, z_angle;
 
 /*
@@ -24,9 +24,9 @@ void setup(void)
 	// Initialize I2C bus
 	Wire.begin();
 #if ARDUINO >= 157
-  Wire.setClock(400000UL); // Set I2C frequency to 400kHz
+	Wire.setClock(400000UL); // Set I2C frequency to 400kHz
 #else
-  TWBR = ((F_CPU / 400000UL) - 16) / 2; // Set I2C frequency to 400kHz
+	TWBR = ((F_CPU / 400000UL) - 16) / 2; // Set I2C frequency to 400kHz
 #endif 
 
 	// Setup barometer w/ high precision
@@ -54,11 +54,11 @@ void loop(void)
 	// Update sensors
 	MPU6050_update();	
 	HMC5883L_update();
-	BMP180_update();
-
 	MPU6050_get_angles(&x_angle, &y_angle);
 	HMC5883L_get_heading_angle(x_angle, y_angle, &z_angle);
-  
+
+	BMP180_update();
+	
 	// Update the LED
 	LED_update();
 
@@ -69,7 +69,7 @@ void loop(void)
 	Serial.print(" heading = ");
 	Serial.println(z_angle);
 
-  delay(10);
+	delay(10);
 }
 
 
