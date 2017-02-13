@@ -17,8 +17,6 @@ double gyro_calibration_x, gyro_calibration_y, gyro_calibration_z;
 int16_t gyro_x, gyro_y, gyro_z;
 // temperature
 int16_t temp;
-// timer 
-uint32_t timer;
 
 void MPU6050_init()
 {
@@ -34,9 +32,6 @@ void MPU6050_init()
 
 	accl_calibration_x = accl_calibration_y = 0.0f;
 	gyro_calibration_x = gyro_calibration_y = gyro_calibration_z = 0.0f;
-	
-	//start timer
-	timer = micros();
 }
 
 void MPU6050_read(void)
@@ -99,11 +94,8 @@ void MPU6050_update(void)
 	gyro_z -= gyro_calibration_z;
 }
 
-void MPU6050_get_angles(float *compensated_angle_x, float *compensated_angle_y)
+void MPU6050_get_angles(float *compensated_angle_x, float *compensated_angle_y, double dt)
 {
-	double dt = (double)(micros() - timer) / 1000000.0;
-	timer = micros();
-
 	// Compute the orientation of the accelerometer relative to the earth (convert from radians to degrees)
 	// Use this data to correct any cumulative errors in the orientation that the gyroscope develops.
 	double roll = atan2(accl_y, accl_z) * RAD2DEG;
