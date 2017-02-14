@@ -14,6 +14,8 @@ const uint8_t PIN_FRONT_LEFT = 6;
 const uint8_t PIN_BACK_RIGHT = 9;
 const uint8_t PIN_BACK_LEFT = 10;
 
+#define THROTTLE_MANUAL_MAX 230
+
 // !!! All angles values are expressed in degrees !!!
 
 // Attitude based on compensated angles, the base referential is those of MPU6050
@@ -29,7 +31,7 @@ float z_max_angular_speed;
 // PID controllers for X/Y axis angles & Z angular speed
 pid_t x_angle_pid, y_angle_pid, z_angular_speed_pid;
 // Orders from PID controllers
-float x_pid_order, y_pid_order, z_pid_order;
+float x_pid_compensation, y_pid_compensation, z_pid_compensation;
 
 // loop timer 
 uint32_t timer;
@@ -77,7 +79,7 @@ void setup(void)
 	x_max_angle = y_max_angle = 15.0;
 	z_max_angular_speed = 30.0;
 
-	x_pid_order = y_pid_order = z_pid_order = 0.0;
+	x_pid_compensation = y_pid_compensation = z_pid_compensation = 0.0;
 
 	
 	// switch off the LED
@@ -116,9 +118,42 @@ void loop(void)
 	z_real_angular_speed = (z_measured_angle - z_measured_angle_previous) / dt;
 
 	// Compute PID
-	x_pid_order = compute_pid(x_setpoint_angle, x_measured_angle, &x_angle_pid);
-	y_pid_order = compute_pid(y_setpoint_angle, y_measured_angle, &y_angle_pid);
-	z_pid_order = compute_pid(z_target_angular_speed, z_real_angular_speed, &z_angular_speed_pid);
+	x_pid_compensation = compute_pid(x_setpoint_angle, x_measured_angle, &x_angle_pid);
+	y_pid_compensation = compute_pid(y_setpoint_angle, y_measured_angle, &y_angle_pid);
+	z_pid_compensation = compute_pid(z_target_angular_speed, z_real_angular_speed, &z_angular_speed_pid);
+
+	// Compute motors
+	uint16_t pwm_fr, pwm_fl, pwm_bl, pwm_br;
+
+	// Initialize PWM according the throttle order
+	pwm_fr = pwm_fl = pwm_bl = pwm_br = (uint16_t)(255.0 * throttle / 100.0);
+	
+	// keep some room for PID compensation
+	if (pwm_fr > THROTTLE_MANUAL_MAX)
+		pwm_fr = THROTTLE_MANUAL_MAX;
+	
+	if (pwm_fl > THROTTLE_MANUAL_MAX)
+		pwm_fl = THROTTLE_MANUAL_MAX;
+
+	if (pwm_bl > THROTTLE_MANUAL_MAX)
+		pwm_bl = THROTTLE_MANUAL_MAX;
+
+	if (pwm_br > THROTTLE_MANUAL_MAX)
+		pwm_br = THROTTLE_MANUAL_MAX;
+
+	// Adjust PWM for each motor
+	pwm_fr += - y_pid_compensation + x_pid_compensation - z_pid_compensation;
+	pwm_fl += - y_pid_compensation - x_pid_compensation + z_pid_compensation;
+	pwm_bl +=   y_pid_compensation - x_pid_compensation - z_pid_compensation;
+	pwm_br +=   y_pid_compensation + x_pid_compensation + z_pid_compensation;
+	
+	// Constraint the PWM to some limits
+	if (pwm_fr > 255) pwm_fr = 255;
+	if (pwm_fl > 255) pwm_fl = 255;
+	if (pwm_bl > 255) pwm_bl = 255;
+	if (pwm_br > 255) pwm_br = 255;
+
+	motor_set_speed(pwm_fr, pwm_fl, pwm_bl, pwm_br);
 	
 	BMP180_update();
 	

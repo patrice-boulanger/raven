@@ -1,7 +1,6 @@
 #include <Arduino.h>
 #include "pid.h"
 
-
 float compute_pid(float setpoint, float measure, pid_t *pid)
 {
 	uint32_t now = millis();
