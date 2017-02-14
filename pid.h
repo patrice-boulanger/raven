@@ -12,6 +12,6 @@ typedef struct {
 	float err_prev;
 } pid_t;
 
-float compute_pid(float target, float current, pid_t *pid);
+float compute_pid(float setpoint, float measure, pid_t *pid);
 
 #endif  // _RAVEN_PID_H

@@ -17,11 +17,11 @@ const uint8_t PIN_BACK_LEFT = 10;
 // !!! All angles values are expressed in degrees !!!
 
 // Attitude based on compensated angles, the base referential is those of MPU6050
-float x_real_angle, y_real_angle, z_real_angle;
+float x_measured_angle, y_measured_angle, z_measured_angle;
 // Previous Z angle value & Z angular speed
-float z_real_angle_previous, z_real_angular_speed;
+float z_measured_angle_previous, z_real_angular_speed;
 // Desired angles, computed from receiver orders & max values
-float x_target_angle, y_target_angle, z_target_angular_speed;
+float x_setpoint_angle, y_setpoint_angle, z_target_angular_speed;
 // Maximal values allowed on X & Y axis 
 float x_max_angle, y_max_angle;
 // Maximal angular speed on Z axis (degrees / second)
@@ -70,9 +70,9 @@ void setup(void)
 	MPU6050_calibrate();		
 
 	// Iniitialize global variables for safety
-	x_real_angle = y_real_angle = z_real_angle = z_real_angle_previous = 0.0f;
+	x_measured_angle = y_measured_angle = z_measured_angle = z_measured_angle_previous = 0.0f;
 	z_real_angular_speed = 0.0f;
-	x_target_angle = y_target_angle = z_target_angular_speed = 0.0f;
+	x_setpoint_angle = y_setpoint_angle = z_target_angular_speed = 0.0f;
 	
 	x_max_angle = y_max_angle = 15.0;
 	z_max_angular_speed = 30.0;
@@ -103,21 +103,21 @@ void loop(void)
 
 #warning change coefficients
 
-	x_target_angle = x_max_angle * roll / 100.0;
-	y_target_angle = y_max_angle * pitch / 100.0;
+	x_setpoint_angle = x_max_angle * roll / 100.0;
+	y_setpoint_angle = y_max_angle * pitch / 100.0;
 	z_target_angular_speed = z_max_angular_speed * yaw / 100.0;
 	
 	// Update sensors & compute real angles values
 	MPU6050_update();	
 	HMC5883L_update();
-	MPU6050_get_angles(&x_real_angle, &y_real_angle, dt);
-	HMC5883L_get_heading_angle(x_real_angle, y_real_angle, &z_real_angle);
+	MPU6050_get_angles(&x_measured_angle, &y_measured_angle, dt);
+	HMC5883L_get_heading_angle(x_measured_angle, y_measured_angle, &z_measured_angle);
 
-	z_real_angular_speed = (z_real_angle - z_real_angle_previous) / dt;
+	z_real_angular_speed = (z_measured_angle - z_measured_angle_previous) / dt;
 
 	// Compute PID
-	x_pid_order = compute_pid(x_target_angle, x_real_angle, &x_angle_pid);
-	y_pid_order = compute_pid(y_target_angle, y_real_angle, &y_angle_pid);
+	x_pid_order = compute_pid(x_setpoint_angle, x_measured_angle, &x_angle_pid);
+	y_pid_order = compute_pid(y_setpoint_angle, y_measured_angle, &y_angle_pid);
 	z_pid_order = compute_pid(z_target_angular_speed, z_real_angular_speed, &z_angular_speed_pid);
 	
 	BMP180_update();
@@ -127,11 +127,11 @@ void loop(void)
 
 	/*
 	Serial.print("roll= ");
-	Serial.print(x_real_angle);
+	Serial.print(x_measured_angle);
 	Serial.print(" pitch = ");
-	Serial.print(y_real_angle);
+	Serial.print(y_measured_angle);
 	Serial.print(" heading = ");
-	Serial.println(z_real_angle);
+	Serial.println(z_measured_angle);
 
 	delay(10);
 	*/

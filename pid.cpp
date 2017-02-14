@@ -1,8 +1,8 @@
 #include "pid.h"
 
-float compute_pid(float target, float current, pid_t *pid)
+float compute_pid(float setpoint, float measure, pid_t *pid)
 {
-	float err = target - current, i_tmp = pid->ki * err, res = 0;
+	float err = setpoint - measure, i_tmp = pid->ki * err, res = 0;
 
 	// update error history
 	pid->err_sum += i_tmp;
