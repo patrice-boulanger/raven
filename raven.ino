@@ -6,7 +6,13 @@
 #include "bmp180.h"
 #include "rx.h"
 #include "pid.h"
+#include "motor.h"
 
+// Motors PINS
+const uint8_t PIN_FRONT_RIGHT = 5;
+const uint8_t PIN_FRONT_LEFT = 6;
+const uint8_t PIN_BACK_RIGHT = 9;
+const uint8_t PIN_BACK_LEFT = 10;
 
 // !!! All angles values are expressed in degrees !!!
 
@@ -23,7 +29,7 @@ float z_max_angular_speed;
 // PID controllers for X/Y axis angles & Z angular speed
 pid_t x_angle_pid, y_angle_pid, z_angular_speed_pid;
 // Orders from PID controllers
-float x_order, y_order, z_order;
+float x_pid_order, y_pid_order, z_pid_order;
 
 // loop timer 
 uint32_t timer;
@@ -41,6 +47,9 @@ void setup(void)
  	LED_set_sequence("x");
 	LED_update();
 
+	// Set motors
+	motor_set_pin(PIN_FRONT_RIGHT, PIN_FRONT_LEFT, PIN_BACK_LEFT, PIN_BACK_RIGHT);
+	
 	// Initialize I2C bus
 	Wire.begin();
 #if ARDUINO >= 157
@@ -68,7 +77,7 @@ void setup(void)
 	x_max_angle = y_max_angle = 15.0;
 	z_max_angular_speed = 30.0;
 
-	x_order = y_order = z_order = 0.0;
+	x_pid_order = y_pid_order = z_pid_order = 0.0;
 
 	
 	// switch off the LED
@@ -84,7 +93,7 @@ void setup(void)
  */
 void loop(void)
 {
-	double dt = (double)(micros() - timer) / 1000000.0;
+	float dt = (float)(micros() - timer) / 1000000.0;
 	timer = micros();
 
 	// Get commands from RX and translate to angles
@@ -107,9 +116,9 @@ void loop(void)
 	z_real_angular_speed = (z_real_angle - z_real_angle_previous) / dt;
 
 	// Compute PID
-	x_order = compute_pid(x_target_angle, x_real_angle, &x_angle_pid);
-	y_order = compute_pid(y_target_angle, y_real_angle, &y_angle_pid);
-	z_order = compute_pid(z_target_angular_speed, z_real_angular_speed, &z_angular_speed_pid);
+	x_pid_order = compute_pid(x_target_angle, x_real_angle, &x_angle_pid);
+	y_pid_order = compute_pid(y_target_angle, y_real_angle, &y_angle_pid);
+	z_pid_order = compute_pid(z_target_angular_speed, z_real_angular_speed, &z_angular_speed_pid);
 	
 	BMP180_update();
 	
