@@ -7,9 +7,7 @@
 #include <math.h>
 
 #include "hmc5883l.h"
-
-#define DEG2RAD 0.017453278f
-#define RAD2DEG 57.2957786f
+#include "util.h"
 
 int X_axis, Y_axis, Z_axis;
 
@@ -60,13 +58,13 @@ void HMC5883L_get_heading_angle(float angle_x, float angle_y, float *angle_z)
 	// https://www.pololu.com/file/0J434/LSM303DLH-compass-app-note.pdf
 	
 	// equation 2, page 7
-	double xh = xp * cos(y_rad) + zp * sin(y_rad),
+	float xh = xp * cos(y_rad) + zp * sin(y_rad),
 		yh = xp * sin(x_rad) * sin(y_rad) + yp * cos(x_rad) - Z_axis * sin(x_rad) * cos(y_rad);
 	
 	// equation 13, page 23
 	float psi = 0;
 	
-	if (abs(xh) < 0.00001) { // avoid floating point comparison to 0.0f
+	if (is_close_to_zero(xh)) { 
 		if (yh < 0)
 			psi = M_PI / 2; // = 90 deg
 		else if (yh > 0)

@@ -24,6 +24,6 @@ void MPU6050_update(void);
 /*
  * Computer angles on x/Y axis (degrees) using a complementary filter
  */
-void MPU6050_get_angles(float *compensated_angle_x, float *compensated_angle_y, double dt);
+void MPU6050_get_angles(float *compensated_angle_x, float *compensated_angle_y, float dt);
 
 #endif // _RAVEN_MPU6050_H

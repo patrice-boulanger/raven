@@ -6,17 +6,17 @@
 
 int ac1, ac2, ac3, vb1, vb2, mb, mc, md;
 unsigned int ac4, ac5, ac6; 
-double c5, c6, x0, x1, x2, y0, y1, y2, p0, p1, p2;
+float c5, c6, x0, x1, x2, y0, y1, y2, p0, p1, p2;
 
 // oversampling settings
 uint8_t osd, cmd_pressure;
 
 // temperature in celsius degrees
-double deg_celsius;
+float deg_celsius;
 // relative pressure in mbar
-double pressure_mbar;
+float pressure_mbar;
 // absolute & relative altitude
-double abs_alt, rel_alt;
+float abs_alt, rel_alt;
 
 uint16_t read_2(uint8_t code)
 {
@@ -58,7 +58,7 @@ void write_bytes(uint8_t *val, int len)
 
 void BMP180_init(uint8_t resolution)
 {
-	double c3, c4, b1;
+	float c3, c4, b1;
   
 	switch(resolution) {
 	case BMP180_RES_ULTRA_LOW:
@@ -149,7 +149,7 @@ void BMP180_update(void)
 	data[0] = BMP180_REG_RESULT;
 	read_bytes(data, 2);
 	
-	double tu = (data[0] * 256.0) + data[1], a = c5 * (tu - c6);
+	float tu = (data[0] * 256.0) + data[1], a = c5 * (tu - c6);
 	deg_celsius = a + (mc / (a + md));
 
 	/*
@@ -168,7 +168,7 @@ void BMP180_update(void)
 	data[0] = BMP180_REG_RESULT;
 	read_bytes(data, 3);
 	
-	double pu = (data[0] * 256.0) + data[1] + (data[2]/256.0),
+	float pu = (data[0] * 256.0) + data[1] + (data[2]/256.0),
 		s = deg_celsius - 25.0,
 		x = (x2 * pow(s, 2)) + (x1 * s) + x0,
 		y = (y2 * pow(s, 2)) + (y1 * s) + y0,

@@ -3,17 +3,16 @@
 
 #include "led.h"
 #include "mpu6050.h"
+#include "util.h"
 
 // Number of loop iterations for gyroscope calibration
 #define CALIBRATION_ITER 1500
 
-#define RAD2DEG 57.2957786f
-
 // acceleration data
-double accl_calibration_x, accl_calibration_y;
+float accl_calibration_x, accl_calibration_y;
 int16_t accl_x, accl_y, accl_z;
 // gyroscope data
-double gyro_calibration_x, gyro_calibration_y, gyro_calibration_z;
+float gyro_calibration_x, gyro_calibration_y, gyro_calibration_z;
 int16_t gyro_x, gyro_y, gyro_z;
 // temperature
 int16_t temp;
@@ -94,15 +93,15 @@ void MPU6050_update(void)
 	gyro_z -= gyro_calibration_z;
 }
 
-void MPU6050_get_angles(float *compensated_angle_x, float *compensated_angle_y, double dt)
+void MPU6050_get_angles(float *compensated_angle_x, float *compensated_angle_y, float dt)
 {
 	// Compute the orientation of the accelerometer relative to the earth (convert from radians to degrees)
 	// Use this data to correct any cumulative errors in the orientation that the gyroscope develops.
-	double roll = atan2(accl_y, accl_z) * RAD2DEG;
-	double pitch = atan2(-accl_x, accl_z) * RAD2DEG;
+	float roll = atan2(accl_y, accl_z) * RAD2DEG;
+	float pitch = atan2(-accl_x, accl_z) * RAD2DEG;
 	
-	double gyro_x_rate = gyro_x / 131.0;
-	double gyro_y_rate = gyro_y / 131.0;
+	float gyro_x_rate = gyro_x / 131.0;
+	float gyro_y_rate = gyro_y / 131.0;
 	
 	//This filter calculates the angle based MOSTLY on integrating the angular velocity to an angular displacement.
 	//dt, recall, is the time between gathering data from the MPU6050.  We'll pretend that the 
