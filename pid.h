@@ -8,8 +8,10 @@ typedef struct {
 	float max;
 	// sum of past errors
 	float err_sum;
-	// previous *error 
-	float err_prev;
+	// previous error 
+	float last_err;
+	// last computation time (ms)
+	uint32_t last_time_ms;
 } pid_t;
 
 float compute_pid(float setpoint, float measure, pid_t *pid);
