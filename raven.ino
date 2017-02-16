@@ -14,6 +14,9 @@ const uint8_t PIN_FRONT_LEFT = 6;
 const uint8_t PIN_BACK_RIGHT = 9;
 const uint8_t PIN_BACK_LEFT = 10;
 
+
+// Keep this value less than the maximal PWM duty cycle to keep
+// some room for PID compensantion
 #define THROTTLE_MANUAL_MAX 230
 
 // !!! All angles values are expressed in degrees !!!
@@ -73,7 +76,7 @@ void setup(void)
 	Serial.println("Calibrate gyroscope & accelerometer ...");
 	MPU6050_calibrate();		
 
-	// Iniitialize global variables for safety
+	// Initialize global variables for safety
 	x_measured_angle = y_measured_angle = z_measured_angle = z_measured_angle_previous = 0.0f;
 	z_measured_angular_speed = 0.0f;
 	x_setpoint_angle = y_setpoint_angle = z_setpoint_angular_speed = 0.0f;
@@ -82,7 +85,11 @@ void setup(void)
 	z_max_angular_speed = 30.0;
 
 	x_pid_compensation = y_pid_compensation = z_pid_compensation = 0.0;
-
+	
+	memset(&x_angle_pid, 0, sizeof(pid_t));
+	memset(&y_angle_pid, 0, sizeof(pid_t));
+	memset(&z_angular_speed_pid, 0, sizeof(pid_t));
+	
 	x_angle_pid.kp = y_angle_pid.kp = 1.5;
 	x_angle_pid.ki = y_angle_pid.ki = 0.035;
 	x_angle_pid.kd = y_angle_pid.kd = 0.01;
@@ -152,8 +159,8 @@ void loop(void)
 		uint16_t pwm_fr, pwm_fl, pwm_bl, pwm_br;
 
 		// Initialize PWM according the throttle setpoint
-		// Since THROTTLE_MANUAL_MAX is less than the max. PWM duty cycle,
-		// we keep some room for PID compensation
+		// Since THROTTLE_MANUAL_MAX is less than the maximal PWM duty cycle,
+		// we keep some room for PID compensation, even with throttle stick at full power.
 		pwm_fr = pwm_fl = pwm_bl = pwm_br = (uint16_t)(THROTTLE_MANUAL_MAX * throttle / 100.0);
 	
 		// Adjust PWM for each motor
@@ -193,6 +200,3 @@ void loop(void)
 
 	z_measured_angle_previous = z_measured_angle;
 }
-
-
-

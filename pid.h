@@ -3,15 +3,15 @@
 
 typedef struct {
 	// PID coefficients
-	float kp = 0, ki = 0, kd = 0;
+	float kp, ki, kd;
 	// max value allowed for this PID
-	uint8_t max = 0;
+	uint8_t max;
 	// sum of past errors
-	float err_sum = 0;
+	float err_sum;
 	// previous error 
-	float last_err = 0;
+	float last_err;
 	// last computation time (ms)
-	uint32_t last_time_ms = 0;
+	uint32_t last_time_ms;
 } pid_t;
 
 float compute_pid(float setpoint, float measure, pid_t *pid);
