@@ -1,5 +1,3 @@
-#include <Arduino.h>
-
 #include "raven.h"
 #include "CPPM.h"
 
@@ -122,8 +120,8 @@ void setup()
 
 	// Enable & initialize CPPM receiver
 	digitalWrite(PIN_CPPM_PWR, HIGH);
-	CPPM.begin();
 	delay(100);
+	CPPM.begin();
 
 	Serial.println("Ready");
 }
