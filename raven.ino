@@ -47,9 +47,9 @@ void set_motor_speed_manual(const cppm_cmd_pct_t *cmd)
 	int pwm_fr, pwm_fl, pwm_br, pwm_bl;
 
 	// Compute PWM delta for each command
-	pwm_yaw = (int) (MANUAL_MODE_PWM_DELTA_MAX * (float)(cmd->yaw) / 100.0);
-	pwm_pitch = (int) (MANUAL_MODE_PWM_DELTA_MAX * (float)(cmd->pitch) / 100.0);
-	pwm_roll = (int) (MANUAL_MODE_PWM_DELTA_MAX * (float)(cmd->roll) / 100.0);
+	pwm_yaw = (int) (sensitivity * (float)(cmd->yaw) / 100.0);
+	pwm_pitch = (int) (sensitivity * (float)(cmd->pitch) / 100.0);
+	pwm_roll = (int) (sensitivity * (float)(cmd->roll) / 100.0);
 	
 	// Initialize PWM according the throttle setpoint
 	pwm_fr = pwm_fl = pwm_bl = pwm_br = (int)(MANUAL_MODE_PWM_MAX * (float)(cmd->throttle) / 100.0);
@@ -159,7 +159,7 @@ void loop()
 		Serial.println(cmd.roll);
 		
 	} else {
-		Serial.println("CPPM not synced");
+		//Serial.println("CPPM not synced");
 	}
 
 	set_motor_speed_manual(&cmd);

@@ -79,19 +79,17 @@
 
 //#define CPPM_PULSE_SYNC_MIN_FLOOR CPPM_T_floor(138 - 38) //(FRSKY_PULSE_SYNC - 50) //10)
 #define CPPM_PULSE_SYNC_MIN_FLOOR (FRSKY_PULSE_SYNC - 50) //10)
-
 //#define CPPM_PULSE_SYNC_MAX_CEIL CPPM_T_ceil(312 + 88) //(FRSKY_PULSE_SYNC + 100) //50) // check sync width... (FRSKY_PULSE_SYNC+20) is too short with R615X
 #define CPPM_PULSE_SYNC_MAX_CEIL (FRSKY_PULSE_SYNC + 100) //50) // check sync width... (FRSKY_PULSE_SYNC+20) is too short with R615X
 
-#define CPPM_FRAME_NOTSYNC_MINUS_PULSE_SYNC_CEIL CPPM_T_ceil(R615X_FRAME_NOTSYNC - FRSKY_PULSE_SYNC) // could be a stange frame if wait so long !
-#define CPPM_FRAME_NOTSYNC_CEIL CPPM_T_ceil(R615X_FRAME_NOTSYNC) // 2% max oscillator error
-//#define CPPM_FRAME_NOTSYNC_CEIL CPPM_T_ceil(22765 + 135) //(R615X_FRAME_NOTSYNC + 100) // 2% max oscillator error
+//#define CPPM_FRAME_NOTSYNC_MINUS_PULSE_SYNC_CEIL CPPM_T_ceil(R615X_FRAME_NOTSYNC - FRSKY_PULSE_SYNC) // could be a stange frame if wait so long !
+//#define CPPM_FRAME_NOTSYNC_CEIL CPPM_T_ceil(R615X_FRAME_NOTSYNC) // 2% max oscillator error
+#define CPPM_FRAME_NOTSYNC_CEIL CPPM_T_ceil(22765 + 135) //(R615X_FRAME_NOTSYNC + 100) // 2% max oscillator error
 
 #define CPPM_PULSE_CENTER_PLUS_C200PC_CEIL CPPM_T_ceil(1500 + 909 + 81) //(R615X_PULSE_CENTER + R615X_PULSE_C200PC) // middle stick+200%
 #define CPPM_PULSE_CENTER_MINUS_C200PC_FLOOR CPPM_T_floor(1500 - 909 - 81) //(1500 (R615X_PULSE_CENTER - R615X_PULSE_C200PC) // too short servo pulse (middle stick-200%) ?
 
-//#define CPPM_FRAME_LENGTH_FLOOR CPPM_T_floor(21980 - 980) //(R615X_FRAME_LENGTH) // frame length too short ?
-#define CPPM_FRAME_LENGTH_FLOOR (R615X_FRAME_LENGTH) // frame length too short ?
+#define CPPM_FRAME_LENGTH_FLOOR CPPM_T_floor(21980 - 980) //(R615X_FRAME_LENGTH) // frame length too short ?
 
 #define CPPM_MSERVO 9 // 9 servos maximum in a 22ms frame
 

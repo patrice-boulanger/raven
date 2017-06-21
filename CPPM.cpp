@@ -165,10 +165,10 @@ ISR(TIMER1_CAPT_vect)
 
 			CPPM._sync2[CPPM.iservo] = CPPM.sync2; // store sync width of current PWM servo pulse
 
-//			if(	CPPM.sync2 < CPPM_T_floor(FRSKY_PULSE_SYNC-10) ||
-//				CPPM.sync2 > CPPM_T_ceil(FRSKY_PULSE_SYNC+50) ) // check sync width... (FRSKY_PULSE_SYNC+20) is too short with R615X
-			if(	CPPM.sync2 < CPPM_PULSE_SYNC_MIN_FLOOR ||
-				CPPM.sync2 > CPPM_PULSE_SYNC_MAX_CEIL )
+			if(	CPPM.sync2 < CPPM_T_floor(FRSKY_PULSE_SYNC-10) ||
+				CPPM.sync2 > CPPM_T_ceil(FRSKY_PULSE_SYNC+50) ) // check sync width... (FRSKY_PULSE_SYNC+20) is too short with R615X
+//			if(	CPPM.sync2 < CPPM_PULSE_SYNC_MIN_FLOOR ||
+//				CPPM.sync2 > CPPM_PULSE_SYNC_MAX_CEIL )
 			{
 				iservos_reset(true);
 			}
@@ -178,14 +178,14 @@ ISR(TIMER1_CAPT_vect)
 
 				if (CPPM.state==1) // ? get pulse until gap pulse found
 				{
-//					CPPM_T_T = tcnt0 + CPPM_T_ceil(R615X_FRAME_NOTSYNC-FRSKY_PULSE_SYNC); // could be a stange frame if wait so long !
-					CPPM_T_T = CPPM.time5 + CPPM_FRAME_NOTSYNC_CEIL; // could be a stange frame if wait so long !
+					CPPM_T_T = tcnt0 + CPPM_T_ceil(R615X_FRAME_NOTSYNC-FRSKY_PULSE_SYNC); // could be a stange frame if wait so long !
+//					CPPM_T_T = CPPM.time5 + CPPM_FRAME_NOTSYNC_CEIL; // could be a stange frame if wait so long !
 				}
 				else // : gap pulse found => start time of frame known.
 				if (CPPM.state==2) // ? get pulses and compute nservo.
 				{
-//					CPPM_T_T = CPPM.time5 + CPPM_T_ceil(R615X_FRAME_NOTSYNC); // 2% max oscillator error
-					CPPM_T_T = CPPM.time5 + CPPM_FRAME_NOTSYNC_CEIL; // set frame timeout
+					CPPM_T_T = CPPM.time5 + CPPM_T_ceil(R615X_FRAME_NOTSYNC); // 2% max oscillator error
+//					CPPM_T_T = CPPM.time5 + CPPM_FRAME_NOTSYNC_CEIL; // set frame timeout
 				}
 				else // : check pulses and gap.
 				{
@@ -213,8 +213,8 @@ ISR(TIMER1_CAPT_vect)
 //		sbi(GPIOR0,CPPM_T_syncing);
 		CPPM_T_syncing = true;
 
-//		CPPM_T_T = tcnt0 + CPPM_T_ceil(FRSKY_PULSE_SYNC+50);
-		CPPM_T_T = tcnt0 + CPPM_PULSE_SYNC_MAX_CEIL;
+		CPPM_T_T = tcnt0 + CPPM_T_ceil(FRSKY_PULSE_SYNC+50);
+//		CPPM_T_T = tcnt0 + CPPM_PULSE_SYNC_MAX_CEIL;
 //		sbi(GPIOR0,CPPM_T_checking);
 		CPPM_T_checking = true;
 
@@ -415,3 +415,9 @@ CPPM_Class::operator bool()
 }
 
 CPPM_Class CPPM;
+
+
+
+
+
+
