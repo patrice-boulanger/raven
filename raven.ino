@@ -98,7 +98,6 @@ void setup()
 
 	// Set PIN mode
 	pinMode(PIN_MPU_INT, INPUT);
-	pinMode(PIN_CPPM_SIG, INPUT);
 	pinMode(PIN_CPPM_PWR, OUTPUT);
 	pinMode(PIN_MOTOR_FR, OUTPUT);
 	pinMode(PIN_MOTOR_FL, OUTPUT);
@@ -119,35 +118,40 @@ void setup()
 	analogWrite(PIN_MOTOR_BL, 0);
 
 	// Enable & initialize CPPM receiver
+	Serial.println("Initialize CPPM rx");
 	digitalWrite(PIN_CPPM_PWR, HIGH);
 	delay(100);
-	CPPM.begin();
+	
+	CPPM.begin(CPPM_CHANNELS);
 
 	Serial.println("Ready");
 }
 
+int cnt = 0, pwm = CPPM_MIN_VALUE;
+
 void loop()
-{
+{	
 	cppm_cmd_pct_t cmd;
 
 	memset(&cmd, 0, sizeof(cppm_cmd_pct_t));
 	
-	CPPM.cycle();
-	if (CPPM.synchronized()) {
-		// Translate CPPM values to (signed) percents
-		int val;
+	if (CPPM.ok()) {
+		int16_t channels[CPPM_CHANNELS];
+		CPPM.read(channels);
 
-		val = CPPM.read_us(CPPM_THRO);
-		cmd.throttle = map(val, CPPM_MIN_VALUE, CPPM_MAX_VALUE, 0, 100);
-
-		val = CPPM.read_us(CPPM_ELEV);
-		cmd.pitch = map(val, CPPM_MIN_VALUE, CPPM_MAX_VALUE, -100, 100);
-
-		val = CPPM.read_us(CPPM_RUDD);				   
-		cmd.yaw = map(val, CPPM_MIN_VALUE, CPPM_MAX_VALUE, -100, 100);
+		/*for(int i = 0; i < CPPM_CHANNELS; i ++) {
+			Serial.print("Ch");
+			Serial.print(i);
+			Serial.print(": ");
+			Serial.print(channels[i]);
+			Serial.println(" ");
+		}*/
 		
-		val = CPPM.read_us(CPPM_AILE);
-		cmd.roll = map(val, CPPM_MIN_VALUE, CPPM_MAX_VALUE, -100, 100);
+		// Translate CPPM values to (signed) percents
+		cmd.throttle = map(channels[CPPM_THROTTLE], CPPM_MIN_VALUE, CPPM_MAX_VALUE, 0, 100);
+		cmd.pitch = map(channels[CPPM_PITCH], CPPM_MIN_VALUE, CPPM_MAX_VALUE, -100, 100);
+		cmd.yaw = map(channels[CPPM_YAW], CPPM_MIN_VALUE, CPPM_MAX_VALUE, -100, 100);
+		cmd.roll = map(channels[CPPM_ROLL], CPPM_MIN_VALUE, CPPM_MAX_VALUE, -100, 100);
 
 		Serial.print("throttle = ");
 		Serial.print(cmd.throttle);
@@ -157,9 +161,7 @@ void loop()
 		Serial.print(cmd.pitch);
 		Serial.print(" roll = ");
 		Serial.println(cmd.roll);
-		
 	} else {
-		//Serial.println("CPPM not synced");
 	}
 
 	set_motor_speed_manual(&cmd);
