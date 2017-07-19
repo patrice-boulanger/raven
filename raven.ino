@@ -1,5 +1,10 @@
 #include "raven.h"
-#include "CPPM.h"
+
+/* 
+ * Use bolderflight SBUS library for Teensy 
+ * https://github.com/bolderflight/SBUS.git
+ */
+#include "SBUS.h"
 
 // Command as signed percents
 typedef struct {
@@ -7,11 +12,21 @@ typedef struct {
 	int yaw;
 	int pitch;
 	int roll;	
-} cppm_cmd_pct_t;
+} cmd_pct_t;
 
 // Command sensitivity
 uint8_t sensitivity = MANUAL_MODE_PWM_SENSITIVITY_MAX;
 
+// FRSky XSR receiver in SBUS mode on serial3
+SBUS xsr(Serial3);
+
+// SBUS channels & data
+float channels[16];
+uint8_t failSafe;
+uint16_t lostFrames = 0;
+	
+cmd_pct_t cmd;
+	
 /* ----- Motors management ----- */
 
 void set_motor_pwm(uint8_t fr, uint8_t fl, uint8_t br, uint8_t bl)
@@ -23,7 +38,7 @@ void set_motor_pwm(uint8_t fr, uint8_t fl, uint8_t br, uint8_t bl)
 }
 
 /*
- * Fully manual control of the drone, based only on commands received from user.
+ * Full manual control of the drone, based only on commands received from user.
  * Don't apply any compensation, free flight style !
  *
  * To compute PWM, use the following rules:
@@ -35,7 +50,7 @@ void set_motor_pwm(uint8_t fr, uint8_t fl, uint8_t br, uint8_t bl)
  *    yaw < 0 -> turns to the left -> front-right/back-left motors speed decreases & front-left/back-right motors speed increases
  *    yaw > 0 -> turns to the right -> front-right/back-left motors speed increases & front-left/back-right motors speed decreases
  */
-void set_motor_speed_manual(const cppm_cmd_pct_t *cmd)
+void set_motor_speed_manual(const cmd_pct_t *cmd)
 {
 	if (cmd->throttle == 0)
 		return;
@@ -90,26 +105,13 @@ void setup()
 	// Initialize I2C bus
 	Serial.println("Initializing I2C bus");
 	Wire.begin();
-#if ARDUINO >= 157
-	Wire.setClock(400000UL); // Set I2C frequency to 400kHz
-#else
-	TWBR = ((F_CPU / 400000UL) - 16) / 2; // Set I2C frequency to 400kHz
-#endif 
 
 	// Set PIN mode
-	pinMode(PIN_MPU_INT, INPUT);
-	pinMode(PIN_CPPM_PWR, OUTPUT);
+	//pinMode(PIN_MPU_INT, INPUT);
 	pinMode(PIN_MOTOR_FR, OUTPUT);
 	pinMode(PIN_MOTOR_FL, OUTPUT);
 	pinMode(PIN_MOTOR_BR, OUTPUT);
 	pinMode(PIN_MOTOR_BL, OUTPUT);
-	pinMode(PIN_LED_0, OUTPUT);
-	pinMode(PIN_LED_1, OUTPUT);
-	pinMode(PIN_BATTERY, INPUT);
-
-	// LEDs on
-	digitalWrite(PIN_LED_0, HIGH);
-	digitalWrite(PIN_LED_1, HIGH);
 	
 	// Motor speed at 0
 	analogWrite(PIN_MOTOR_FR, 0);
@@ -117,51 +119,40 @@ void setup()
 	analogWrite(PIN_MOTOR_BR, 0);
 	analogWrite(PIN_MOTOR_BL, 0);
 
-	// Enable & initialize CPPM receiver
-	Serial.println("Initialize CPPM rx");
-	digitalWrite(PIN_CPPM_PWR, HIGH);
-	delay(100);
-	
-	CPPM.begin(CPPM_CHANNELS);
+	Serial.println("Initialize SBUS");
+	xsr.begin();
 
 	Serial.println("Ready");
 }
 
-int cnt = 0, pwm = CPPM_MIN_VALUE;
-
 void loop()
 {	
-	cppm_cmd_pct_t cmd;
-
-	memset(&cmd, 0, sizeof(cppm_cmd_pct_t));
+	memset(&cmd, 0, sizeof(cmd_pct_t));
 	
-	if (CPPM.ok()) {
-		int16_t channels[CPPM_CHANNELS];
-		CPPM.read(channels);
-
-		/*for(int i = 0; i < CPPM_CHANNELS; i ++) {
+	if (xsr.readCal(&channels[0], &failSafe, &lostFrames)) {
+/*
+		for(int i = 0; i < 16; i ++) {
 			Serial.print("Ch");
 			Serial.print(i);
 			Serial.print(": ");
 			Serial.print(channels[i]);
 			Serial.println(" ");
-		}*/
-		
-		// Translate CPPM values to (signed) percents
-		cmd.throttle = map(channels[CPPM_THROTTLE], CPPM_MIN_VALUE, CPPM_MAX_VALUE, 0, 100);
-		cmd.pitch = map(channels[CPPM_PITCH], CPPM_MIN_VALUE, CPPM_MAX_VALUE, -100, 100);
-		cmd.yaw = map(channels[CPPM_YAW], CPPM_MIN_VALUE, CPPM_MAX_VALUE, -100, 100);
-		cmd.roll = map(channels[CPPM_ROLL], CPPM_MIN_VALUE, CPPM_MAX_VALUE, -100, 100);
+		}
+*/		
+		// Translate SBUS values to (signed) percents
+		cmd.throttle = (int)((100 + 100.0 * channels[SBUS_CHANNEL_THROTTLE]) / 2);
+		cmd.pitch = (int)(100.0 * channels[SBUS_CHANNEL_PITCH]);
+		cmd.yaw = (int)(100.0 * channels[SBUS_CHANNEL_YAW]);
+		cmd.roll = (int)(100.0 * channels[SBUS_CHANNEL_ROLL]);
 
-		Serial.print("throttle = ");
+/*		Serial.print("throttle = ");
 		Serial.print(cmd.throttle);
 		Serial.print(" yaw = ");
 		Serial.print(cmd.yaw);
 		Serial.print(" pitch = ");
 		Serial.print(cmd.pitch);
 		Serial.print(" roll = ");
-		Serial.println(cmd.roll);
-	} else {
+		Serial.println(cmd.roll);*/
 	}
 
 	set_motor_speed_manual(&cmd);
