@@ -1,4 +1,5 @@
 #include "raven.h"
+#include "motors.h"
 
 /* 
  * Use bolderflight SBUS library for Teensy 
@@ -8,14 +9,11 @@
 
 // Command as signed percents
 typedef struct {
-	int throttle;
-	int yaw;
-	int pitch;
-	int roll;	
+	float throttle;
+	float yaw;
+	float pitch;
+	float roll;	
 } cmd_pct_t;
-
-// Command sensitivity
-uint8_t sensitivity = MANUAL_MODE_PWM_SENSITIVITY_MAX;
 
 // FRSky XSR receiver in SBUS mode on serial3
 SBUS xsr(Serial3);
@@ -27,15 +25,7 @@ uint16_t lostFrames = 0;
 	
 cmd_pct_t cmd;
 	
-/* ----- Motors management ----- */
-
-void set_motor_pwm(uint8_t fr, uint8_t fl, uint8_t br, uint8_t bl)
-{
-	analogWrite(PIN_MOTOR_FR, fr);
-	analogWrite(PIN_MOTOR_FL, fl);
-	analogWrite(PIN_MOTOR_BR, br);
-	analogWrite(PIN_MOTOR_BL, bl);
-}
+/* ----- Flight controller ----- */
 
 /*
  * Full manual control of the drone, based only on commands received from user.
@@ -52,44 +42,28 @@ void set_motor_pwm(uint8_t fr, uint8_t fl, uint8_t br, uint8_t bl)
  */
 void set_motor_speed_manual(const cmd_pct_t *cmd)
 {
-	if (cmd->throttle == 0)
+	if (cmd->throttle == 0) {
+		motors_set_speed(0, 0, 0, 0);
 		return;
+	}
+		
+	// Motors speeds, initialized according the throttle setpoint
+	int speed_fr, speed_fl, speed_br, speed_bl;
+	speed_fr = speed_fl = speed_bl = speed_br = MOTOR_MIN + (int)((MOTOR_MAX - MOTOR_MIN) * cmd->throttle);       
 	
-	// Commands PWM values
-	int pwm_yaw, pwm_pitch, pwm_roll;
+	// Compute delta speeds for each command
+	int delta_yaw, delta_pitch, delta_roll;
+	delta_yaw = (int) (MOTOR_MANUAL_DELTA_MAX * cmd->yaw);
+	delta_pitch = (int) (MOTOR_MANUAL_DELTA_MAX * cmd->pitch);
+	delta_roll = (int) (MOTOR_MANUAL_DELTA_MAX * cmd->roll);
 	
-	// Motors PWM values
-	int pwm_fr, pwm_fl, pwm_br, pwm_bl;
-
-	// Compute PWM delta for each command
-	pwm_yaw = (int) (sensitivity * (float)(cmd->yaw) / 100.0);
-	pwm_pitch = (int) (sensitivity * (float)(cmd->pitch) / 100.0);
-	pwm_roll = (int) (sensitivity * (float)(cmd->roll) / 100.0);
-	
-	// Initialize PWM according the throttle setpoint
-	pwm_fr = pwm_fl = pwm_bl = pwm_br = (int)(MANUAL_MODE_PWM_MAX * (float)(cmd->throttle) / 100.0);
-	
-	// Adjust PWM for each motor
-	pwm_fr += - pwm_roll - pwm_pitch + pwm_yaw;
-	pwm_fl +=   pwm_roll - pwm_pitch - pwm_yaw;
-	pwm_bl +=   pwm_roll + pwm_pitch + pwm_yaw;
-	pwm_br += - pwm_roll + pwm_pitch - pwm_yaw;
-	
-	// Constraint PWM freq
-	if (pwm_fr > 255) pwm_fr = 255;
-	if (pwm_fr < 0) pwm_fr = 0;
-	
-	if (pwm_fl > 255) pwm_fl = 255;
-	if (pwm_fl < 0) pwm_fl = 0;
-	
-	if (pwm_br > 255) pwm_br = 255;
-	if (pwm_br < 0) pwm_br = 0;
-
-	if (pwm_bl > 255) pwm_bl = 255;
-	if (pwm_bl < 0) pwm_bl = 0;
-	
-	// Set speeds
-	set_motor_pwm(pwm_fr, pwm_fl, pwm_br, pwm_bl);
+	// Adjust speeds for each motor
+	speed_fr += - delta_roll - delta_pitch + delta_yaw;
+	speed_fl +=   delta_roll - delta_pitch - delta_yaw;
+	speed_bl +=   delta_roll + delta_pitch + delta_yaw;
+	speed_br += - delta_roll + delta_pitch - delta_yaw;
+		
+	motors_set_speed(speed_fr, speed_fl, speed_br, speed_bl);
 }
 
 /* ----- Main program ----- */
@@ -106,22 +80,12 @@ void setup()
 	Serial.println("Initializing I2C bus");
 	Wire.begin();
 
-	// Set PIN mode
-	//pinMode(PIN_MPU_INT, INPUT);
-	pinMode(PIN_MOTOR_FR, OUTPUT);
-	pinMode(PIN_MOTOR_FL, OUTPUT);
-	pinMode(PIN_MOTOR_BR, OUTPUT);
-	pinMode(PIN_MOTOR_BL, OUTPUT);
-	
-	// Motor speed at 0
-	analogWrite(PIN_MOTOR_FR, 0);
-	analogWrite(PIN_MOTOR_FL, 0);
-	analogWrite(PIN_MOTOR_BR, 0);
-	analogWrite(PIN_MOTOR_BL, 0);
-
 	Serial.println("Initialize SBUS");
 	xsr.begin();
 
+	Serial.println("Initialize motors");
+	motors_initialize(PIN_MOTOR_FR, PIN_MOTOR_FL, PIN_MOTOR_BR, PIN_MOTOR_BL); 
+	
 	Serial.println("Ready");
 }
 
@@ -130,6 +94,11 @@ void loop()
 	memset(&cmd, 0, sizeof(cmd_pct_t));
 	
 	if (xsr.readCal(&channels[0], &failSafe, &lostFrames)) {
+		cmd.throttle = (0.100 + channels[SBUS_CHANNEL_THROTTLE]) / 2; // 0 -> 1
+		cmd.pitch = channels[SBUS_CHANNEL_PITCH]; // -1 -> 1
+		cmd.yaw = channels[SBUS_CHANNEL_YAW];     // -1 -> 1
+		cmd.roll = channels[SBUS_CHANNEL_ROLL];   // -1 -> 1
+
 /*
 		for(int i = 0; i < 16; i ++) {
 			Serial.print("Ch");
@@ -139,11 +108,6 @@ void loop()
 			Serial.println(" ");
 		}
 */		
-		// Translate SBUS values to (signed) percents
-		cmd.throttle = (int)((100 + 100.0 * channels[SBUS_CHANNEL_THROTTLE]) / 2);
-		cmd.pitch = (int)(100.0 * channels[SBUS_CHANNEL_PITCH]);
-		cmd.yaw = (int)(100.0 * channels[SBUS_CHANNEL_YAW]);
-		cmd.roll = (int)(100.0 * channels[SBUS_CHANNEL_ROLL]);
 
 /*		Serial.print("throttle = ");
 		Serial.print(cmd.throttle);
@@ -153,7 +117,8 @@ void loop()
 		Serial.print(cmd.pitch);
 		Serial.print(" roll = ");
 		Serial.println(cmd.roll);*/
-	}
 
+	}
+	
 	set_motor_speed_manual(&cmd);
 }
