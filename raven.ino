@@ -46,10 +46,13 @@ void set_motor_speed_manual(const cmd_pct_t *cmd)
 		motors_set_speed(0, 0, 0, 0);
 		return;
 	}
-		
+
+	// Smooth the speed parameter using square of the throttle command
+	float speed = cmd->throttle * cmd->throttle;
+	
 	// Motors speeds, initialized according the throttle setpoint
 	int speed_fr, speed_fl, speed_br, speed_bl;
-	speed_fr = speed_fl = speed_bl = speed_br = MOTOR_MIN + (int)((MOTOR_MAX - MOTOR_MIN) * cmd->throttle);       
+	speed_fr = speed_fl = speed_bl = speed_br = MOTOR_MIN + (int)((MOTOR_MAX - MOTOR_MIN) * speed);       
 	
 	// Compute delta speeds for each command
 	int delta_yaw, delta_pitch, delta_roll;
@@ -87,6 +90,8 @@ void setup()
 	motors_initialize(PIN_MOTOR_FR, PIN_MOTOR_FL, PIN_MOTOR_BR, PIN_MOTOR_BL); 
 	
 	Serial.println("Ready");
+
+	motors_set_speed(0, 0, 0, 0);
 }
 
 void loop()
@@ -94,7 +99,7 @@ void loop()
 	memset(&cmd, 0, sizeof(cmd_pct_t));
 	
 	if (xsr.readCal(&channels[0], &failSafe, &lostFrames)) {
-		cmd.throttle = (0.100 + channels[SBUS_CHANNEL_THROTTLE]) / 2; // 0 -> 1
+		cmd.throttle = (0.1 + channels[SBUS_CHANNEL_THROTTLE]) / 2.0; // 0 -> 1
 		cmd.pitch = channels[SBUS_CHANNEL_PITCH]; // -1 -> 1
 		cmd.yaw = channels[SBUS_CHANNEL_YAW];     // -1 -> 1
 		cmd.roll = channels[SBUS_CHANNEL_ROLL];   // -1 -> 1
