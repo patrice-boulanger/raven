@@ -24,7 +24,10 @@ uint8_t failSafe;
 uint16_t lostFrames = 0;
 	
 cmd_pct_t cmd;
-	
+
+// Debugging
+unsigned long last_time = 0;
+
 /* ----- Flight controller ----- */
 
 /*
@@ -67,6 +70,20 @@ void set_motor_speed_manual(const cmd_pct_t *cmd)
 	speed_br += - delta_roll + delta_pitch - delta_yaw;
 		
 	motors_set_speed(speed_fr, speed_fl, speed_br, speed_bl);
+
+	// DEBUG: print motors speeds every 5 seconds
+	if (millis() - last_time > 5000) {
+		Serial.print("FR: ");
+		Serial.print(speed_fr);
+		Serial.print(" FL: ");
+		Serial.print(speed_fl);
+		Serial.print(" BR: ");
+		Serial.print(speed_br);
+		Serial.print(" BL: ");
+		Serial.println(speed_bl);
+
+		last_time = millis();
+	}
 }
 
 /* ----- Main program ----- */
