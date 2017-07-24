@@ -51,36 +51,44 @@ void set_motor_speed_manual(const cmd_pct_t *cmd)
 	}
 
 	// Smooth the speed parameter using square of the throttle command
-	float speed = cmd->throttle * cmd->throttle;
+	float throttle2 = cmd->throttle * cmd->throttle;
 	
-	// Motors speeds, initialized according the throttle setpoint
-	int speed_fr, speed_fl, speed_br, speed_bl;
-	speed_fr = speed_fl = speed_bl = speed_br = MOTOR_MIN + (int)((MOTOR_MAX - MOTOR_MIN) * speed);       
-	
-	// Compute delta speeds for each command
-	int delta_yaw, delta_pitch, delta_roll;
-	delta_yaw = (int) (MOTOR_MANUAL_DELTA_MAX * cmd->yaw);
-	delta_pitch = (int) (MOTOR_MANUAL_DELTA_MAX * cmd->pitch);
-	delta_roll = (int) (MOTOR_MANUAL_DELTA_MAX * cmd->roll);
-	
-	// Adjust speeds for each motor
-	speed_fr += - delta_roll - delta_pitch + delta_yaw;
-	speed_fl +=   delta_roll - delta_pitch - delta_yaw;
-	speed_bl +=   delta_roll + delta_pitch + delta_yaw;
-	speed_br += - delta_roll + delta_pitch - delta_yaw;
-		
-	motors_set_speed(speed_fr, speed_fl, speed_br, speed_bl);
+	uint16_t throttle_speed = MOTOR_MIN_SPEED + throttle2 * MOTOR_DELTA_SPEED;
+
+	/*
+	 * decrease speed_delta while throttle speed increase ??
+	 * 
+	 */
+	float speed_delta = MOTOR_SPEED_REACTIVTY * throttle_speed;
+
+	float front_right_adjust  = - cmd->roll - cmd->pitch + cmd->yaw,
+		front_left_adjust =   cmd->roll - cmd->pitch - cmd->yaw,
+		back_left_adjust  =   cmd->roll + cmd->pitch + cmd->yaw,
+		back_right_adjust = - cmd->roll + cmd->pitch - delta_yaw;
+
+	int16_t front_right_speed = throttle_speed + (int16_t)(front_right_adjust * speed_delta),
+		front_left_speed  = throttle_speed + (int16_t)(front_left_adjust  * speed_delta),
+		back_left_speed   = throttle_speed + (int16_t)(back_left_adjust   * speed_delta),
+		back_right_speed  = throttle_speed + (int16_t)(back_right_adjust  * speed_delta);
+
+	// Check limits
+	if (front_right_speed > MOTOR_MAX_SPEED) front_right_speed = MOTOR_MAX_SPEED;
+	if (front_left_speed > MOTOR_MAX_SPEED)	  front_left_speed = MOTOR_MAX_SPEED;
+	if (back_left_speed > MOTOR_MAX_SPEED)	   back_left_speed = MOTOR_MAX_SPEED;
+	if (back_right_speed > MOTOR_MAX_SPEED)	  back_right_speed = MOTOR_MAX_SPEED;
+
+	motors_set_speed(front_left_speed, front_right_speed, back_right_speed, back_left_speed);
 
 	// DEBUG: print motors speeds every 5 seconds
 	if (millis() - last_time > 5000) {
 		Serial.print("FR: ");
-		Serial.print(speed_fr);
+		Serial.print(front_right_speed);
 		Serial.print(" FL: ");
-		Serial.print(speed_fl);
+		Serial.print(front_left_speed);
 		Serial.print(" BR: ");
-		Serial.print(speed_br);
+		Serial.print(back_right_speed);
 		Serial.print(" BL: ");
-		Serial.println(speed_bl);
+		Serial.println(back_left_speed);
 
 		last_time = millis();
 	}

@@ -32,8 +32,9 @@ const uint8_t SBUS_CHANNEL_PITCH = 2;
 const uint8_t SBUS_CHANNEL_YAW = 3;
 
 // Motor control
-const uint16_t MOTOR_MIN = 0;
-const uint16_t MOTOR_MAX = 170;;
-const uint16_t MOTOR_MANUAL_DELTA_MAX = 5;
+const uint16_t MOTOR_MIN_SPEED = 0;
+const uint16_t MOTOR_MAX_SPEED = 180;
+const uint16_t MOTOR_DELTA_SPEED = (MOTOR_MAX_SPEED - MOTOR_MIN_SPEED);
+const float MOTOR_SPEED_REACTIVTY = 0.05; // percent
 
 #endif // raven_h
