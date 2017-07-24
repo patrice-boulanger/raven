@@ -35,6 +35,6 @@ const uint8_t SBUS_CHANNEL_YAW = 3;
 const uint16_t MOTOR_MIN_SPEED = 0;
 const uint16_t MOTOR_MAX_SPEED = 180;
 const uint16_t MOTOR_DELTA_SPEED = (MOTOR_MAX_SPEED - MOTOR_MIN_SPEED);
-const float MOTOR_SPEED_REACTIVTY = 0.05; // percent
+const float MOTOR_SPEED_REACTIVTY = 0.15; // percent
 
 #endif // raven_h
