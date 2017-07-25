@@ -54,13 +54,13 @@ void motors_set_speed(float speed_fr, float speed_fl, float speed_br, float spee
 void motors_dance()
 {
 	motors_set_speed(50, 0, 0, 0);
-	delay(500);
+	delay(200);
 	motors_set_speed(0, 50, 0, 0);
-	delay(500);
+	delay(200);
 	motors_set_speed(0, 0, 50, 0);
-	delay(500);
+	delay(200);
 	motors_set_speed(0, 0, 0, 50);
-	delay(500);
+	delay(200);
 	motors_set_speed(0, 0, 0, 0);
 }
 

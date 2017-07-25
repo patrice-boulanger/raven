@@ -12,6 +12,8 @@ float throttle;
 float yaw;
 float pitch;
 float roll;	
+bool armed;
+bool buzzer;
 
 // FRSky XSR receiver in SBUS mode on serial3
 SBUS xsr(Serial3);
@@ -48,10 +50,10 @@ void set_motor_speed_manual()
 	float front_right_speed, front_left_speed, back_right_speed, back_left_speed;
 	front_right_speed = front_left_speed = back_right_speed = back_left_speed = throttle;
 	
-	front_right_speed  += 0.05 * (- roll - pitch - yaw) / 3;
-	back_left_speed    += 0.05 * (  roll + pitch - yaw) / 3;
-	front_left_speed   += 0.05 * (  roll - pitch + yaw) / 3;
-	back_right_speed   += 0.05 * (- roll + pitch + yaw) / 3;
+	front_right_speed  += 0.15 * (- roll - pitch - yaw) / 3;
+	back_left_speed    += 0.15 * (  roll + pitch - yaw) / 3;
+	front_left_speed   += 0.15 * (  roll - pitch + yaw) / 3;
+	back_right_speed   += 0.15 * (- roll + pitch + yaw) / 3;
 
 	motors_set_speed(front_left_speed, front_right_speed, back_right_speed, back_left_speed);
 }
@@ -84,36 +86,39 @@ void setup()
 void loop()
 {	
 	if (xsr.readCal(&channels[0], &failSafe, &lostFrames)) {
-
-		if (failSage) {
+		if (failSafe) {
 			// do something ...
 			Serial.println("FAIL SAFE !!!");
+			motors_set_speed(0,0,0,0);
 			return;
 		}
-		
-		throttle = (1.0 + channels[SBUS_CHANNEL_THROTTLE]) / 2.0; // 0 -> 1
-		pitch = channels[SBUS_CHANNEL_PITCH]; // -1 -> 1
-		roll = channels[SBUS_CHANNEL_ROLL];   // -1 -> 1
-		yaw = channels[SBUS_CHANNEL_YAW];     // -1 -> 1
 
+		buzzer = (channels[SBUS_CHANNEL_BUZZER] < 0.0);
+
+		armed = (channels[SBUS_CHANNEL_ARMED] >= 0.0);
+		if (!armed) {
+			throttle = pitch = roll = yaw = 0.0;		
+		} else {			
+			throttle = (1.0 + channels[SBUS_CHANNEL_THROTTLE]) / 2.0; // 0 -> 1
+			
+			if (throttle > MOTORS_ARM_SPEED) {
+				pitch = channels[SBUS_CHANNEL_PITCH]; // -1 -> 1
+				roll = channels[SBUS_CHANNEL_ROLL];   // -1 -> 1
+				yaw = channels[SBUS_CHANNEL_YAW];     // -1 -> 1
+			} else
+				throttle = MOTORS_ARM_SPEED;
+		}
+			
 /*
 		for(int i = 0; i < 16; i ++) {
 			Serial.print("Ch");
 			Serial.print(i);
 			Serial.print(": ");
 			Serial.print(channels[i]);
-			Serial.println(" ");
+			Serial.print(" ");
 		}
-*/		
-/*
-		Serial.print("throttle = ");
-		Serial.print(cmd.throttle);
-		Serial.print(" yaw = ");
-		Serial.print(cmd.yaw);
-		Serial.print(" pitch = ");
-		Serial.print(cmd.pitch);
-		Serial.print(" roll = ");
-		Serial.println(cmd.roll);
+
+		Serial.println();
 */
 		// DEBUG: print motors speeds every 5 seconds
 		if (millis() - last_time > 2000) {
@@ -124,8 +129,12 @@ void loop()
 			Serial.print(" Roll: ");
 			Serial.print(roll);
 			Serial.print(" Yaw: ");
-			Serial.println(yaw);
-
+			Serial.print(yaw);
+			Serial.print(" Arm: ");
+			Serial.print(armed);
+			Serial.print(" Buzzer: ");
+			Serial.println(buzzer);
+			
 			last_time = millis();
 		}
 	
