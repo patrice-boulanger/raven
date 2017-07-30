@@ -21,9 +21,9 @@ const uint8_t PIN_MPU_INT = 2;
 // These pins are compatibles w/ either Servo or PWMServo libraries
 // See https://www.pjrc.com/teensy/td_libs_Servo.html for details
 const uint8_t SBUS_CHANNEL_THROTTLE = 0;
-const uint8_t SBUS_CHANNEL_ROLL = 1;
+const uint8_t SBUS_CHANNEL_YAW = 1;
 const uint8_t SBUS_CHANNEL_PITCH = 2;
-const uint8_t SBUS_CHANNEL_YAW = 3;
+const uint8_t SBUS_CHANNEL_ROLL = 3;
 const uint8_t SBUS_CHANNEL_ARMED = 4;
 const uint8_t SBUS_CHANNEL_BUZZER = 5;
 
