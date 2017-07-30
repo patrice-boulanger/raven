@@ -1,6 +1,13 @@
 #include "raven.h"
 #include "motors.h"
 
+/*
+ * Use jrowberg I2Cdev library for MPU6050
+ * https://github.com/jrowberg/i2cdevlib
+ */ 
+#include "I2Cdev.h"
+#include "MPU6050.h"
+
 /* 
  * Use bolderflight SBUS library for Teensy 
  * https://github.com/bolderflight/SBUS.git

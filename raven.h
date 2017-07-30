@@ -1,4 +1,3 @@
-
 /*
  * raven.h - main raven include file
  */
@@ -12,10 +11,10 @@
 #error This code runs on Teensy board >= 3.0
 #endif 
 
-#define RAVEN_VERSION "0.2.1"
+#define RAVEN_VERSION "0.2.2"
 
 // Arduino PINs
-const uint8_t PIN_MPU_INT = 2;
+const uint8_t PIN_MPU_INT = 6;
 
 // SBUS channels mapping
 // These pins are compatibles w/ either Servo or PWMServo libraries
