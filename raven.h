@@ -13,8 +13,8 @@
 
 #define RAVEN_VERSION "0.2.2"
 
-// Arduino PINs
-const uint8_t PIN_MPU_INT = 6;
+// MPU6050 Interrupt PIN
+const uint8_t MPU6050_INT = 6;
 
 // SBUS channels mapping
 // These pins are compatibles w/ either Servo or PWMServo libraries
