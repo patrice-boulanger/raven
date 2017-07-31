@@ -113,6 +113,38 @@ void set_motor_speed_manual()
 	back_right_speed   += 0.15 * (- roll + pitch + yaw) / 3;
 }
 
+// MPU calibration
+const int iAx = 0;
+const int iAy = 1;
+const int iAz = 2;
+const int iGx = 3;
+const int iGy = 4;
+const int iGz = 5;
+const int N_CALIB = 1000;
+
+void calibrate_mpu(int *outputs)
+{	
+	int16_t raw[6], i;
+	long sums[6];
+	
+	for(i = iAx; i <= iGz; i ++) {
+		sums[i] = 0;	
+	}
+
+	for(i = 0; i < N_CALIB; i ++) {
+		mpu.getMotion6(&raw[iAx], &raw[iAy], &raw[iAz],
+			       &raw[iGx], &raw[iGy], &raw[iGz]);
+		delay(5);
+
+		for(int j = iAx; j <= iGz; j ++)
+			sums[j] += raw[j];
+	}
+
+	for(i = iAx; i <= iGz; i ++) {
+		outputs[i] = (sums[i] + N_CALIB/2) / N_CALIB;
+	}
+}
+
 // Setup
 void setup()
 {
@@ -125,6 +157,9 @@ void setup()
 	Serial.print(RAVEN_VERSION);
 	Serial.println(F(" starting"));
 
+	Serial.println(F("- Initializing SBUS"));
+	xsr.begin();
+	
 	// Join I2C bus (I2Cdev library doesn't do this automatically)
 	Serial.println(F("- Initializing I2C bus"));
         Wire.begin();
@@ -136,20 +171,42 @@ void setup()
 	pinMode(MPU6050_PIN_INT, INPUT);
 
 	// Check connection w/ MPU
-	if (!mpu.testConnection()) {
+	while(!mpu.testConnection()) {
 		Serial.println(F("  Connection to MPU6050 failed !"));
-		while(true);
+		delay(500);
 	}
 
 	// Configure DMP
 	Serial.println(F("  Initializing DMP..."));
 	devStatus = mpu.dmpInitialize();
 
-	// TODO: calibration procedure
-	mpu.setXGyroOffset(0);
-	mpu.setYGyroOffset(0);
-	mpu.setZGyroOffset(0);
-	mpu.setZAccelOffset(0); // 1688 factory default for my test chip
+	// Calibrate MPU
+	Serial.println(F("  Calibration"));
+	int smoothed[6] = { 364, 154, 15987, -89, 30, 10 };
+
+/*	delay(5000);
+	
+	calibrate_mpu(smoothed);
+
+	for(int i = iAx; i <= iGz; i ++) {
+		Serial.print("smoothed[");
+		Serial.print(i);
+		Serial.print("] = ");
+		Serial.print(smoothed[i]);
+		Serial.print(" ");
+	}
+
+	Serial.println();
+
+	while(true);
+*/	
+	mpu.setXAccelOffset(smoothed[iAx]);
+	mpu.setYAccelOffset(smoothed[iAy]);
+	mpu.setZAccelOffset(smoothed[iAz]);
+	
+	mpu.setXGyroOffset(smoothed[iGx]);
+	mpu.setYGyroOffset(smoothed[iGy]);
+	mpu.setZGyroOffset(smoothed[iGz]);
 
 	// Check MPU status
 	if (devStatus == 0) {
@@ -157,7 +214,7 @@ void setup()
 		Serial.println(F("  Enabling DMP..."));
 		mpu.setDMPEnabled(true);
 
-		// enable Arduino interrupt detection
+		// enable interrupt detection
 		Serial.print(F("  Enabling interrupt detection on PIN "));
 		Serial.println(MPU6050_PIN_INT);
 		
@@ -184,11 +241,7 @@ void setup()
 		while(true);
 	}
 	
-	Serial.println(F("- Initializing SBUS"));
-	xsr.begin();
-	
 	Serial.println(F("Ready"));
-	delay(500);
 	
 	// Initialize loop timer
 	dt_loop = millis();
@@ -211,20 +264,22 @@ void channels_dump()
 // Main loop
 void loop()
 {
+	unsigned long now = millis();
+	
 	do {
 		// Get user commands
 		if (xsr.readCal(&channels[0], &failSafe, &lostFrames)) {
 			// Out of range, stop everything :-/
-			if (failSafe) {
+/*			if (failSafe) {
 				// do something ...
-				Serial.println(F("!!! OUT OF RANGE !!!"));
-				
+				Serial.println(F("!!! OUT OF RANGE !!!"));				
 				m_FR.set_speed(0);
 				m_FL.set_speed(0);
 				m_BR.set_speed(0);
 				m_BL.set_speed(0);
+				
 				return;
-			}
+			}*/				
 			
 			buzzer = (channels[SBUS_CHANNEL_BUZZER] < 0.0);
 			
@@ -271,51 +326,19 @@ void loop()
 		// (this lets us immediately read more without waiting for an interrupt)
 		fifoCount -= packetSize;
 
-		mpu.dmpGetQuaternion(&q, fifoBuffer);
-		mpu.dmpGetEuler(euler, &q);
-		mpu.dmpGetGravity(&gravity, &q);
-		mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-		mpu.dmpGetAccel(&aa, fifoBuffer);
-		mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
-		mpu.dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &q);
+		if (now - dt_loop > 1000) {
+			mpu.dmpGetQuaternion(&q, fifoBuffer);
 
-		Serial.print("quat\t");
-		Serial.print(q.w);
-		Serial.print("\t");
-		Serial.print(q.x);
-		Serial.print("\t");
-		Serial.print(q.y);
-		Serial.print("\t");
-		Serial.println(q.z);
-	
-		Serial.print("euler\t");
-		Serial.print(euler[0] * 180/M_PI);
-		Serial.print("\t");
-		Serial.print(euler[1] * 180/M_PI);
-		Serial.print("\t");
-		Serial.println(euler[2] * 180/M_PI);
+			Serial.print("quat\t");
+			Serial.print(q.w);
+			Serial.print("\t");
+			Serial.print(q.x);
+			Serial.print("\t");
+			Serial.print(q.y);
+			Serial.print("\t");
+			Serial.println(q.z);
 
-		Serial.print("ypr\t");
-		Serial.print(ypr[0] * 180/M_PI);
-		Serial.print("\t");
-		Serial.print(ypr[1] * 180/M_PI);
-		Serial.print("\t");
-		Serial.println(ypr[2] * 180/M_PI);
-		
-		Serial.print("areal\t");
-		Serial.print(aaReal.x);
-		Serial.print("\t");
-		Serial.print(aaReal.y);
-		Serial.print("\t");
-		Serial.println(aaReal.z);
-
-		Serial.print("aworld\t");
-		Serial.print(aaWorld.x);
-		Serial.print("\t");
-		Serial.print(aaWorld.y);
-		Serial.print("\t");
-		Serial.println(aaWorld.z);
+			dt_loop = now;
+		}
 	}
-
-	
 }
