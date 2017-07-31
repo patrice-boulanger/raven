@@ -7,6 +7,16 @@ Motor m_BR(ESC_PIN_BR);
 Motor m_BL(ESC_PIN_BL);
 
 /*
+ * Use br3ttb PID library
+ * https://github.com/br3ttb/Arduino-PID-Library
+ */
+#include "PID_v1.h"
+PID *pid_FR;
+PID *pid_FL;
+PID *pid_BR;
+PID *pid_BL;
+
+/*
  * Use jrowberg I2Cdev library for MPU6050
  * https://github.com/jrowberg/i2cdevlib
  */ 
@@ -198,19 +208,18 @@ void channels_dump()
 // Main loop
 void loop()
 {
-	while(!mpuIntStatus && fifoCount < packetSize) {
+	do {
 		// Get user commands
 		if (xsr.readCal(&channels[0], &failSafe, &lostFrames)) {
 			// Out of range, stop everything :-/
 			if (failSafe) {
 				// do something ...
-				Serial.println("FAIL SAFE !!!");
+				Serial.println("!!! OUT OF RANGE !!!");
 				
 				m_FR.set_speed(0);
 				m_FL.set_speed(0);
 				m_BR.set_speed(0);
 				m_BL.set_speed(0);
-				
 				return;
 			}
 			
@@ -230,7 +239,7 @@ void loop()
 					throttle = MOTORS_ARM_SPEED;
 			}
 		} 
-	}
+	} while(!mpuIntStatus && fifoCount < packetSize);
 
 	// reset interrupt flag and get INT_STATUS byte
 	mpuInterrupt = false;
@@ -248,7 +257,8 @@ void loop()
 		// otherwise, check for DMP data ready interrupt (this should happen frequently)
 	} else if (mpuIntStatus & 0x02) {
 		// wait for correct available data length, should be a VERY short wait
-		while (fifoCount < packetSize) fifoCount = mpu.getFIFOCount();
+		while (fifoCount < packetSize)
+			fifoCount = mpu.getFIFOCount();
 
 		// read a packet from FIFO
 		mpu.getFIFOBytes(fifoBuffer, packetSize);
@@ -257,7 +267,6 @@ void loop()
 		// (this lets us immediately read more without waiting for an interrupt)
 		fifoCount -= packetSize;
 
-		// display quaternion values in easy matrix form: w x y z
 		mpu.dmpGetQuaternion(&q, fifoBuffer);
 		mpu.dmpGetEuler(euler, &q);
 		mpu.dmpGetGravity(&gravity, &q);
