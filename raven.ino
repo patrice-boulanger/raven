@@ -33,6 +33,15 @@ uint16_t packetSize;    // expected DMP packet size (default is 42 bytes)
 uint16_t fifoCount;     // count of all bytes currently in FIFO
 uint8_t fifoBuffer[64]; // FIFO storage buffer
 
+// Orientation/motion vars
+Quaternion q;           // [w, x, y, z]         quaternion container
+VectorInt16 aa;         // [x, y, z]            accel sensor measurements
+VectorInt16 aaReal;     // [x, y, z]            gravity-free accel sensor measurements
+VectorInt16 aaWorld;    // [x, y, z]            world-frame accel sensor measurements
+VectorFloat gravity;    // [x, y, z]            gravity vector
+float euler[3];         // [psi, theta, phi]    Euler angle container
+float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
+
 /* 
  * Use bolderflight SBUS library for Teensy 
  * https://github.com/bolderflight/SBUS.git
@@ -52,9 +61,9 @@ float pitch;
 float roll;	
 bool armed;
 bool buzzer;
-	
-// Debugging
-unsigned long last_time = 0;
+
+// Loop timer
+unsigned long dt_loop = 0;
 
 /* ----- MPU6050 Interrupt detection routine ----- */
 
@@ -94,8 +103,7 @@ void set_motor_speed_manual()
 	back_right_speed   += 0.15 * (- roll + pitch + yaw) / 3;
 }
 
-/* ----- Main program ----- */
-
+// Setup
 void setup()
 {
 	// Start serial console
@@ -135,7 +143,7 @@ void setup()
 	mpu.setZGyroOffset(0);
 	mpu.setZAccelOffset(0); // 1688 factory default for my test chip
 
-	// make sure it worked (returns 0 if so)
+	// Check MPU status
 	if (devStatus == 0) {
 		// turn on the DMP, now that it's ready
 		Serial.println(F("  Enabling DMP..."));
@@ -168,40 +176,14 @@ void setup()
 	xsr.begin();
 	
 	Serial.println("Ready");
+
+	// Initialize loop timer
+	dt_loop = millis();
 }
 
-void loop()
-{	
-	if (xsr.readCal(&channels[0], &failSafe, &lostFrames)) {
-		if (failSafe) {
-			// do something ...
-			Serial.println("FAIL SAFE !!!");
-
-			m_FR.set_speed(0);
-			m_FL.set_speed(0);
-			m_BR.set_speed(0);
-			m_BL.set_speed(0);
-			
-			return;
-		}
-
-		buzzer = (channels[SBUS_CHANNEL_BUZZER] < 0.0);
-
-		armed = (channels[SBUS_CHANNEL_ARMED] >= 0.0);
-		if (!armed) {
-			throttle = pitch = roll = yaw = 0.0;		
-		} else {			
-			throttle = (1.0 + channels[SBUS_CHANNEL_THROTTLE]) / 2.0; // 0 -> 1
-			
-			if (throttle > MOTORS_ARM_SPEED) {
-				pitch = channels[SBUS_CHANNEL_PITCH]; // -1 -> 1
-				roll = channels[SBUS_CHANNEL_ROLL];   // -1 -> 1
-				yaw = channels[SBUS_CHANNEL_YAW];     // -1 -> 1
-			} else
-				throttle = MOTORS_ARM_SPEED;
-		}
-			
-/*
+// Dump all SBUS channels to serial
+void channels_dump()
+{
 		for(int i = 0; i < 16; i ++) {
 			Serial.print("Ch");
 			Serial.print(i);
@@ -211,24 +193,114 @@ void loop()
 		}
 
 		Serial.println();
-*/
-		// DEBUG: print motors speeds every 5 seconds
-		if (millis() - last_time > 2000) {
-			Serial.print("Throttle: ");
-			Serial.print(throttle);
-			Serial.print(" Pitch: ");
-			Serial.print(pitch);
-			Serial.print(" Roll: ");
-			Serial.print(roll);
-			Serial.print(" Yaw: ");
-			Serial.print(yaw);
-			Serial.print(" Arm: ");
-			Serial.print(armed);
-			Serial.print(" Buzzer: ");
-			Serial.println(buzzer);
+}	
+
+// Main loop
+void loop()
+{
+	while(!mpuIntStatus && fifoCount < packetSize) {
+		// Get user commands
+		if (xsr.readCal(&channels[0], &failSafe, &lostFrames)) {
+			// Out of range, stop everything :-/
+			if (failSafe) {
+				// do something ...
+				Serial.println("FAIL SAFE !!!");
+				
+				m_FR.set_speed(0);
+				m_FL.set_speed(0);
+				m_BR.set_speed(0);
+				m_BL.set_speed(0);
+				
+				return;
+			}
 			
-			last_time = millis();
-		}
+			buzzer = (channels[SBUS_CHANNEL_BUZZER] < 0.0);
+			
+			armed = (channels[SBUS_CHANNEL_ARMED] >= 0.0);
+			if (!armed) {
+				throttle = pitch = roll = yaw = 0.0;		
+			} else {			
+				throttle = (1.0 + channels[SBUS_CHANNEL_THROTTLE]) / 2.0; // 0 -> 1
+				
+				if (throttle > MOTORS_ARM_SPEED) {
+					pitch = channels[SBUS_CHANNEL_PITCH]; // -1 -> 1
+					roll = channels[SBUS_CHANNEL_ROLL];   // -1 -> 1
+					yaw = channels[SBUS_CHANNEL_YAW];     // -1 -> 1
+				} else
+					throttle = MOTORS_ARM_SPEED;
+			}
+		} 
+	}
+
+	// reset interrupt flag and get INT_STATUS byte
+	mpuInterrupt = false;
+	mpuIntStatus = mpu.getIntStatus();
+
+	// get current FIFO count
+	fifoCount = mpu.getFIFOCount();
+
+	// check for overflow (this should never happen unless our code is too inefficient)
+	if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
+		// reset so we can continue cleanly
+		mpu.resetFIFO();
+		Serial.println("MPU FIFO overflow !");
+
+		// otherwise, check for DMP data ready interrupt (this should happen frequently)
+	} else if (mpuIntStatus & 0x02) {
+		// wait for correct available data length, should be a VERY short wait
+		while (fifoCount < packetSize) fifoCount = mpu.getFIFOCount();
+
+		// read a packet from FIFO
+		mpu.getFIFOBytes(fifoBuffer, packetSize);
+        
+		// track FIFO count here in case there is > 1 packet available
+		// (this lets us immediately read more without waiting for an interrupt)
+		fifoCount -= packetSize;
+
+		// display quaternion values in easy matrix form: w x y z
+		mpu.dmpGetQuaternion(&q, fifoBuffer);
+		mpu.dmpGetEuler(euler, &q);
+		mpu.dmpGetGravity(&gravity, &q);
+		mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+		mpu.dmpGetAccel(&aa, fifoBuffer);
+		mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
+		mpu.dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &q);
+
+		Serial.print("quat\t");
+		Serial.print(q.w);
+		Serial.print("\t");
+		Serial.print(q.x);
+		Serial.print("\t");
+		Serial.print(q.y);
+		Serial.print("\t");
+		Serial.println(q.z);
 	
-	} 
+		Serial.print("euler\t");
+		Serial.print(euler[0] * 180/M_PI);
+		Serial.print("\t");
+		Serial.print(euler[1] * 180/M_PI);
+		Serial.print("\t");
+		Serial.println(euler[2] * 180/M_PI);
+
+		Serial.print("ypr\t");
+		Serial.print(ypr[0] * 180/M_PI);
+		Serial.print("\t");
+		Serial.print(ypr[1] * 180/M_PI);
+		Serial.print("\t");
+		Serial.println(ypr[2] * 180/M_PI);
+		
+		Serial.print("areal\t");
+		Serial.print(aaReal.x);
+		Serial.print("\t");
+		Serial.print(aaReal.y);
+		Serial.print("\t");
+		Serial.println(aaReal.z);
+
+		Serial.print("aworld\t");
+		Serial.print(aaWorld.x);
+		Serial.print("\t");
+		Serial.print(aaWorld.y);
+		Serial.print("\t");
+		Serial.println(aaWorld.z);
+	}
 }
