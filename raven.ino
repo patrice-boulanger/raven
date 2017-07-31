@@ -1,27 +1,43 @@
 #include "raven.h"
 
 #include "motor.h"
-
-Motor front_right(ESC_PIN_FR);
-Motor front_left(ESC_PIN_FL);
-Motor back_right(ESC_PIN_BR);
-Motor back_left(ESC_PIN_BL);
+Motor m_FR(ESC_PIN_FR);
+Motor m_FL(ESC_PIN_FL);
+Motor m_BR(ESC_PIN_BR);
+Motor m_BL(ESC_PIN_BL);
 
 /*
  * Use jrowberg I2Cdev library for MPU6050
  * https://github.com/jrowberg/i2cdevlib
  */ 
 #include "I2Cdev.h"
-#include "MPU6050.h"
-
+#include "MPU6050_6Axis_MotionApps20.h"
+//#include "MPU6050.h"
+// Arduino Wire library is required if I2Cdev I2CDEV_ARDUINO_WIRE implementation
+// is used in I2Cdev.h
+#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+    #include "Wire.h"
+#endif
+// class default I2C address is 0x68
+// specific I2C addresses may be passed as a parameter here
+// AD0 low = 0x68 (default for SparkFun breakout and InvenSense evaluation board)
+// AD0 high = 0x69
 MPU6050 mpu;
+//MPU6050 mpu(0x69); // <-- use for AD0 high
+
+// MPU control/status variables
+bool dmpReady = false;  // set true if DMP init was successful
+uint8_t mpuIntStatus;   // holds actual interrupt status byte from MPU
+uint8_t devStatus;      // return status after each device operation (0 = success, !0 = error)
+uint16_t packetSize;    // expected DMP packet size (default is 42 bytes)
+uint16_t fifoCount;     // count of all bytes currently in FIFO
+uint8_t fifoBuffer[64]; // FIFO storage buffer
 
 /* 
  * Use bolderflight SBUS library for Teensy 
  * https://github.com/bolderflight/SBUS.git
  */
 #include "SBUS.h"
-
 // FRSky XSR receiver in SBUS mode on Serial3
 SBUS xsr(Serial3);
 // SBUS channels & data
@@ -39,6 +55,14 @@ bool buzzer;
 	
 // Debugging
 unsigned long last_time = 0;
+
+/* ----- MPU6050 Interrupt detection routine ----- */
+
+volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
+void dmpDataReady() {
+    mpuInterrupt = true;
+}
+
 
 /* ----- Flight controller ----- */
 
@@ -76,19 +100,74 @@ void setup()
 {
 	// Start serial console
 	Serial.begin(9600);
+
 	Serial.print("raven v");
 	Serial.print(RAVEN_VERSION);
 	Serial.println(" starting");
+
+	// Join I2C bus (I2Cdev library doesn't do this automatically)
+	Serial.println("- Initializing I2C bus");
+#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+        Wire.begin();
+        Wire.setClock(400000); // 400kHz I2C clock. Comment this line if having compilation difficulties
+#elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
+        Fastwire::setup(400, true);
+#endif
+
+	// Initialize MPU
+	Serial.println("- Initializing MPU");
+	mpu.initialize();
+	pinMode(MPU6050_PIN_INT, INPUT);
+
+	// Check connection w/ MPU
+	if (!mpu.testConnection()) {
+		Serial.println("  Connection to MPU6050 failed !");
+		while(true);
+	}
+
+	// Configure DMP
+	Serial.println("  Initializing DMP...");
+	devStatus = mpu.dmpInitialize();
+
+	// TODO: calibration procedure
+	mpu.setXGyroOffset(0);
+	mpu.setYGyroOffset(0);
+	mpu.setZGyroOffset(0);
+	mpu.setZAccelOffset(0); // 1688 factory default for my test chip
+
+	// make sure it worked (returns 0 if so)
+	if (devStatus == 0) {
+		// turn on the DMP, now that it's ready
+		Serial.println(F("  Enabling DMP..."));
+		mpu.setDMPEnabled(true);
+
+		// enable Arduino interrupt detection
+		Serial.print("  Enabling interrupt detection on PIN ");
+		Serial.println(MPU6050_PIN_INT);
+		
+		attachInterrupt(digitalPinToInterrupt(MPU6050_PIN_INT), dmpDataReady, RISING);
+		mpuIntStatus = mpu.getIntStatus();
+
+		// set our DMP Ready flag so the main loop() function knows it's okay to use it
+		Serial.println("  DMP ready");
+		dmpReady = true;
+
+		// get expected DMP packet size for later comparison
+		packetSize = mpu.dmpGetFIFOPacketSize();
+	} else {
+		// ERROR!
+		// 1 = initial memory load failed
+		// 2 = DMP configuration updates failed
+		// (if it's going to break, usually the code will be 1)
+		Serial.print("  DMP Initialization failed, code ");
+		Serial.println(devStatus);
+		while(true);
+	}
 	
-	// Initialize I2C bus
-	Serial.println("Initializing I2C bus");
-	Wire.begin();
-
-	Serial.println("Initialize SBUS");
+	Serial.println("- Initializing SBUS");
 	xsr.begin();
-
+	
 	Serial.println("Ready");
-
 }
 
 void loop()
@@ -97,6 +176,12 @@ void loop()
 		if (failSafe) {
 			// do something ...
 			Serial.println("FAIL SAFE !!!");
+
+			m_FR.set_speed(0);
+			m_FL.set_speed(0);
+			m_BR.set_speed(0);
+			m_BL.set_speed(0);
+			
 			return;
 		}
 
