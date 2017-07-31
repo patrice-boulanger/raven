@@ -119,32 +119,30 @@ void setup()
 	// Start serial console
 	Serial.begin(9600);
 
-	Serial.print("raven v");
+	delay(200);
+	
+	Serial.print(F("raven v"));
 	Serial.print(RAVEN_VERSION);
-	Serial.println(" starting");
+	Serial.println(F(" starting"));
 
 	// Join I2C bus (I2Cdev library doesn't do this automatically)
-	Serial.println("- Initializing I2C bus");
-#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+	Serial.println(F("- Initializing I2C bus"));
         Wire.begin();
         Wire.setClock(400000); // 400kHz I2C clock. Comment this line if having compilation difficulties
-#elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
-        Fastwire::setup(400, true);
-#endif
 
 	// Initialize MPU
-	Serial.println("- Initializing MPU");
+	Serial.println(F("- Initializing MPU"));
 	mpu.initialize();
 	pinMode(MPU6050_PIN_INT, INPUT);
 
 	// Check connection w/ MPU
 	if (!mpu.testConnection()) {
-		Serial.println("  Connection to MPU6050 failed !");
+		Serial.println(F("  Connection to MPU6050 failed !"));
 		while(true);
 	}
 
 	// Configure DMP
-	Serial.println("  Initializing DMP...");
+	Serial.println(F("  Initializing DMP..."));
 	devStatus = mpu.dmpInitialize();
 
 	// TODO: calibration procedure
@@ -160,18 +158,22 @@ void setup()
 		mpu.setDMPEnabled(true);
 
 		// enable Arduino interrupt detection
-		Serial.print("  Enabling interrupt detection on PIN ");
+		Serial.print(F("  Enabling interrupt detection on PIN "));
 		Serial.println(MPU6050_PIN_INT);
 		
 		attachInterrupt(digitalPinToInterrupt(MPU6050_PIN_INT), dmpDataReady, RISING);
 		mpuIntStatus = mpu.getIntStatus();
 
 		// set our DMP Ready flag so the main loop() function knows it's okay to use it
-		Serial.println("  DMP ready");
+		Serial.println(F("  DMP ready"));
 		dmpReady = true;
 
 		// get expected DMP packet size for later comparison
 		packetSize = mpu.dmpGetFIFOPacketSize();
+		Serial.print(F("  FIFO packet size "));
+		Serial.print(packetSize);
+		Serial.println(F(" bytes"));
+		
 	} else {
 		// ERROR!
 		// 1 = initial memory load failed
@@ -182,11 +184,12 @@ void setup()
 		while(true);
 	}
 	
-	Serial.println("- Initializing SBUS");
+	Serial.println(F("- Initializing SBUS"));
 	xsr.begin();
 	
-	Serial.println("Ready");
-
+	Serial.println(F("Ready"));
+	delay(500);
+	
 	// Initialize loop timer
 	dt_loop = millis();
 }
@@ -214,7 +217,7 @@ void loop()
 			// Out of range, stop everything :-/
 			if (failSafe) {
 				// do something ...
-				Serial.println("!!! OUT OF RANGE !!!");
+				Serial.println(F("!!! OUT OF RANGE !!!"));
 				
 				m_FR.set_speed(0);
 				m_FL.set_speed(0);
@@ -239,7 +242,8 @@ void loop()
 					throttle = MOTORS_ARM_SPEED;
 			}
 		} 
-	} while(!mpuIntStatus && fifoCount < packetSize);
+	} while(!mpuInterrupt && fifoCount < packetSize);
+
 
 	// reset interrupt flag and get INT_STATUS byte
 	mpuInterrupt = false;
@@ -252,7 +256,7 @@ void loop()
 	if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
 		// reset so we can continue cleanly
 		mpu.resetFIFO();
-		Serial.println("MPU FIFO overflow !");
+		Serial.println(F("MPU FIFO overflow !"));
 
 		// otherwise, check for DMP data ready interrupt (this should happen frequently)
 	} else if (mpuIntStatus & 0x02) {
@@ -312,4 +316,6 @@ void loop()
 		Serial.print("\t");
 		Serial.println(aaWorld.z);
 	}
+
+	
 }
