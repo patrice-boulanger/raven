@@ -52,6 +52,10 @@ VectorFloat gravity;    // [x, y, z]            gravity vector
 float euler[3];         // [psi, theta, phi]    Euler angle container
 float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 
+// Calibration values (Ax/Ay/Az/Gx/Gy/Gz)
+const int N_CALIB = 10000;
+int cal_values[6] = { 364, 154, 15987, -89, 30, 10 };
+
 /* 
  * Use bolderflight SBUS library for Teensy 
  * https://github.com/bolderflight/SBUS.git
@@ -113,36 +117,68 @@ void set_motor_speed_manual()
 	back_right_speed   += 0.15 * (- roll + pitch + yaw) / 3;
 }
 
-// MPU calibration
-const int iAx = 0;
-const int iAy = 1;
-const int iAz = 2;
-const int iGx = 3;
-const int iGy = 4;
-const int iGz = 5;
-const int N_CALIB = 1000;
-
-void calibrate_mpu(int *outputs)
-{	
-	int16_t raw[6], i;
-	long sums[6];
+void mpu_calibrate()
+{
+	// Wait until the device converge & stabilize
 	
-	for(i = iAx; i <= iGz; i ++) {
-		sums[i] = 0;	
-	}
+	bool done = false;
+	Quaternion last, diff;
 
-	for(i = 0; i < N_CALIB; i ++) {
-		mpu.getMotion6(&raw[iAx], &raw[iAy], &raw[iAz],
-			       &raw[iGx], &raw[iGy], &raw[iGz]);
-		delay(5);
+	last.w = last.x = last.y = last.z = 0;
+	
+	while(!done) {
+	
+		while(!mpuInterrupt && fifoCount < packetSize);
 
-		for(int j = iAx; j <= iGz; j ++)
-			sums[j] += raw[j];
-	}
+		// reset interrupt flag and get INT_STATUS byte
+		mpuInterrupt = false;
+		mpuIntStatus = mpu.getIntStatus();
 
-	for(i = iAx; i <= iGz; i ++) {
-		outputs[i] = (sums[i] + N_CALIB/2) / N_CALIB;
-	}
+		// get current FIFO count
+		fifoCount = mpu.getFIFOCount();
+
+		// check for overflow (this should never happen unless our code is too inefficient)
+		if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
+			// reset so we can continue cleanly
+			mpu.resetFIFO();
+			Serial.println(F("MPU FIFO overflow !"));
+
+			// otherwise, check for DMP data ready interrupt (this should happen frequently)
+		} else if (mpuIntStatus & 0x02) {
+			// wait for correct available data length, should be a VERY short wait
+			while (fifoCount < packetSize)
+				fifoCount = mpu.getFIFOCount();
+			// read a packet from FIFO
+			mpu.getFIFOBytes(fifoBuffer, packetSize);
+        
+			// track FIFO count here in case there is > 1 packet available
+			// (this lets us immediately read more without waiting for an interrupt)
+			fifoCount -= packetSize;
+
+			mpu.dmpGetQuaternion(&q, fifoBuffer);
+			diff.w = q.w - last.w;
+			diff.x = q.x - last.x;
+			diff.y = q.y - last.y;
+			diff.z = q.z - last.z;
+
+			if (diff.w < 0.0000001 && diff.x < 0.0000001 && diff.y < 0.0000001 && diff.z < 0.0000001) {
+				Serial.println("  MPU stabilised");
+				done = true;
+			}
+
+			last.w = q.w;
+			last.x = q.x;
+			last.y = q.y;
+			last.z = q.z;
+		}
+	}	
+
+	mpu.setXAccelOffset(mpu.getXAccelOffset());
+	mpu.setYAccelOffset(mpu.getYAccelOffset());
+	mpu.setZAccelOffset(mpu.getZAccelOffset());
+	mpu.setXGyroOffset(mpu.getXGyroOffset());
+	mpu.setYGyroOffset(mpu.getYGyroOffset());
+	mpu.setZGyroOffset(mpu.getZGyroOffset());
 }
 
 // Setup
@@ -151,23 +187,27 @@ void setup()
 	// Start serial console
 	Serial.begin(9600);
 
-	delay(200);
-	
 	Serial.print(F("raven v"));
 	Serial.print(RAVEN_VERSION);
 	Serial.println(F(" starting"));
 
-	Serial.println(F("- Initializing SBUS"));
+	Serial.println(F("> Initializing SBUS"));
 	xsr.begin();
 	
 	// Join I2C bus (I2Cdev library doesn't do this automatically)
-	Serial.println(F("- Initializing I2C bus"));
+	Serial.println(F("> Initializing I2C bus"));
         Wire.begin();
         Wire.setClock(400000); // 400kHz I2C clock. Comment this line if having compilation difficulties
 
+	delay(5000);
+
 	// Initialize MPU
-	Serial.println(F("- Initializing MPU"));
+	Serial.println(F("> Initializing MPU"));
 	mpu.initialize();
+
+	mpu.setFullScaleGyroRange(MPU6050_GYRO_FS_2000);
+    	mpu.setFullScaleAccelRange(MPU6050_ACCEL_FS_2);
+
 	pinMode(MPU6050_PIN_INT, INPUT);
 
 	// Check connection w/ MPU
@@ -179,35 +219,7 @@ void setup()
 	// Configure DMP
 	Serial.println(F("  Initializing DMP..."));
 	devStatus = mpu.dmpInitialize();
-
-	// Calibrate MPU
-	Serial.println(F("  Calibration"));
-	int smoothed[6] = { 364, 154, 15987, -89, 30, 10 };
-
-/*	delay(5000);
 	
-	calibrate_mpu(smoothed);
-
-	for(int i = iAx; i <= iGz; i ++) {
-		Serial.print("smoothed[");
-		Serial.print(i);
-		Serial.print("] = ");
-		Serial.print(smoothed[i]);
-		Serial.print(" ");
-	}
-
-	Serial.println();
-
-	while(true);
-*/	
-	mpu.setXAccelOffset(smoothed[iAx]);
-	mpu.setYAccelOffset(smoothed[iAy]);
-	mpu.setZAccelOffset(smoothed[iAz]);
-	
-	mpu.setXGyroOffset(smoothed[iGx]);
-	mpu.setYGyroOffset(smoothed[iGy]);
-	mpu.setZGyroOffset(smoothed[iGz]);
-
 	// Check MPU status
 	if (devStatus == 0) {
 		// turn on the DMP, now that it's ready
@@ -240,6 +252,9 @@ void setup()
 		Serial.println(devStatus);
 		while(true);
 	}
+
+	Serial.println("Calibrate");
+	mpu_calibrate();
 	
 	Serial.println(F("Ready"));
 	
@@ -259,8 +274,8 @@ void channels_dump()
 		}
 
 		Serial.println();
-}	
-
+}
+	
 // Main loop
 void loop()
 {
@@ -326,19 +341,15 @@ void loop()
 		// (this lets us immediately read more without waiting for an interrupt)
 		fifoCount -= packetSize;
 
-		if (now - dt_loop > 1000) {
-			mpu.dmpGetQuaternion(&q, fifoBuffer);
+		mpu.dmpGetQuaternion(&q, fifoBuffer);
+	        mpu.dmpGetGravity(&gravity, &q);
+    		mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
 
-			Serial.print("quat\t");
-			Serial.print(q.w);
-			Serial.print("\t");
-			Serial.print(q.x);
-			Serial.print("\t");
-			Serial.print(q.y);
-			Serial.print("\t");
-			Serial.println(q.z);
-
-			dt_loop = now;
-		}
+		Serial.print("ypr\t");
+    		Serial.print(ypr[0] * 180/M_PI);
+    		Serial.print("\t");
+    		Serial.print(ypr[1] * 180/M_PI);
+    		Serial.print("\t");
+    		Serial.println(ypr[2] * 180/M_PI);
 	}
 }
