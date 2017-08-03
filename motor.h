@@ -7,7 +7,7 @@
 class Motor
 {
 public:
-	Motor(uint8_t pin, uint16_t min_pulse = ESC_MIN_PULSE_WIDTH, uint16_t max_pulse = ESC_MAX_PULSE_WIDTH);
+	Motor(uint8_t pin, uint16_t min_pulse = ESC_PULSE_MIN_WIDTH, uint16_t max_pulse = ESC_PULSE_MAX_WIDTH);
 	~Motor();
 
 	/*
