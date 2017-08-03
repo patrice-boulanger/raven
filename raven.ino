@@ -43,19 +43,6 @@ uint16_t packetSize;    // expected DMP packet size (default is 42 bytes)
 uint16_t fifoCount;     // count of all bytes currently in FIFO
 uint8_t fifoBuffer[64]; // FIFO storage buffer
 
-// Orientation/motion vars
-Quaternion q;           // [w, x, y, z]         quaternion container
-VectorInt16 aa;         // [x, y, z]            accel sensor measurements
-VectorInt16 aaReal;     // [x, y, z]            gravity-free accel sensor measurements
-VectorInt16 aaWorld;    // [x, y, z]            world-frame accel sensor measurements
-VectorFloat gravity;    // [x, y, z]            gravity vector
-float euler[3];         // [psi, theta, phi]    Euler angle container
-float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
-
-// Calibration values (Ax/Ay/Az/Gx/Gy/Gz)
-const int N_CALIB = 10000;
-int cal_values[6] = { 364, 154, 15987, -89, 30, 10 };
-
 /* 
  * Use bolderflight SBUS library for Teensy 
  * https://github.com/bolderflight/SBUS.git
@@ -68,24 +55,8 @@ float channels[16];
 uint8_t failSafe;
 uint16_t lostFrames = 0;
 
-// Command as signed percents
-float throttle;
-float yaw;
-float pitch;
-float roll;	
-bool armed;
-bool buzzer;
-
 // Loop timer
 unsigned long dt_loop = 0;
-
-/* ----- MPU6050 Interrupt detection routine ----- */
-
-volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
-void dmpDataReady() {
-    mpuInterrupt = true;
-}
-
 
 /* ----- Flight controller ----- */
 
@@ -102,86 +73,148 @@ void dmpDataReady() {
  *    yaw < 0 -> rotate left -> front-right/back-left motors speed increases & front-left/back-right motors speed decreases
  *    yaw > 0 -> rotate right -> front-right/back-left motors speed decreases & front-left/back-right motors speed increases
  */
-void set_motor_speed_manual()
+void set_motor_speed_manual(float cmd_throttle, float cmd_yaw, float cmd_pitch, float cmd_roll)
 {
 	// Keep some room for motors adjustement
-	if (throttle > 0.9)
-		throttle = 0.9;
+	if (cmd_throttle > 0.9)
+		cmd_throttle = 0.9;
 
-	float front_right_speed, front_left_speed, back_right_speed, back_left_speed;
-	front_right_speed = front_left_speed = back_right_speed = back_left_speed = throttle;
-	
+	int16_t front_right_speed, front_left_speed, back_right_speed, back_left_speed;
+	front_right_speed = front_left_speed = back_right_speed = back_left_speed = ESC_PULSE_MIN_WIDTH + cmd_throttle * (ESC_PULSE_MAX_WIDTH - ESC_PULSE_MIN_WIDTH);
+
+/*	
 	front_right_speed  += 0.15 * (- roll - pitch - yaw) / 3;
 	back_left_speed    += 0.15 * (  roll + pitch - yaw) / 3;
 	front_left_speed   += 0.15 * (  roll - pitch + yaw) / 3;
 	back_right_speed   += 0.15 * (- roll + pitch + yaw) / 3;
+*/
+	
+	m_FR.set_speed(front_right_speed);
+	m_FL.set_speed(front_left_speed);
+	m_BR.set_speed(back_right_speed);
+	m_BL.set_speed(back_left_speed);
 }
+
+/* ----- Read quaternion from MPU ----- */
+
+bool mpu_read_quat(Quaternion *q)
+{
+	while(!mpuInterrupt && fifoCount < packetSize);
+
+	// Reset interrupt flag and get INT_STATUS byte
+	mpuInterrupt = false;
+	mpuIntStatus = mpu.getIntStatus();
+	
+	// Get current FIFO count
+	fifoCount = mpu.getFIFOCount();
+
+	// Check for overflow (this should never happen unless our code is too inefficient)
+	if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
+		// Reset so we can continue cleanly
+		mpu.resetFIFO();
+		Serial.println(F("MPU FIFO overflow"));
+		
+		return false;
+	} else if (mpuIntStatus & 0x02) {
+		// Check for DMP data ready interrupt (this should happen frequently)
+		
+		// Wait for correct available data length, should be a VERY short wait
+		while (fifoCount < packetSize)
+			fifoCount = mpu.getFIFOCount();
+		
+		// Read a packet from FIFO
+		mpu.getFIFOBytes(fifoBuffer, packetSize);
+		
+		// Track FIFO count here in case there is > 1 packet available
+		// (this lets us immediately read more without waiting for an interrupt)
+		fifoCount -= packetSize;
+		
+		mpu.dmpGetQuaternion(q, fifoBuffer);
+
+		return true;
+	}
+}
+
+/* ----- Read Yaw/Pitch/Roll angles (radians) from MPU ----- */
+
+bool mpu_read_ypr(float *yaw, float *pitch, float *roll)
+{
+	// Orientation/motion vars
+	Quaternion q;           // [w, x, y, z]         quaternion container
+	VectorFloat gravity;    // [x, y, z]            gravity vector
+	float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
+
+	if (!mpu_read_quat(&q))
+		return false;
+	
+	mpu.dmpGetGravity(&gravity, &q);
+	mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+
+	// Radians
+	*yaw = ypr[0];
+	*pitch = ypr[1];
+	*roll = ypr[2];
+
+	return true;
+}
+
+/* ----- Find accel. & gyro offsets for the MPU ----- */
 
 void mpu_calibrate()
 {
-	// Wait until the device converge & stabilize
+	float dw, dx, dy, dz, avg = 0, alpha = 0.96;
+	Quaternion last, q;
+	int count = 100; // prevent to break the loop before at least count samples
 	
-	bool done = false;
-	Quaternion last, diff;
-
 	last.w = last.x = last.y = last.z = 0;
 	
-	while(!done) {
-	
-		while(!mpuInterrupt && fifoCount < packetSize);
+	while(true) {
+		if (mpu_read_quat(&q)) {
+			dw = q.w - last.w;
+			dx = q.x - last.x;
+			dy = q.y - last.y;
+			dz = q.z - last.z;
 
-		// reset interrupt flag and get INT_STATUS byte
-		mpuInterrupt = false;
-		mpuIntStatus = mpu.getIntStatus();
-
-		// get current FIFO count
-		fifoCount = mpu.getFIFOCount();
-
-		// check for overflow (this should never happen unless our code is too inefficient)
-		if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
-			// reset so we can continue cleanly
-			mpu.resetFIFO();
-			Serial.println(F("MPU FIFO overflow !"));
-
-			// otherwise, check for DMP data ready interrupt (this should happen frequently)
-		} else if (mpuIntStatus & 0x02) {
-			// wait for correct available data length, should be a VERY short wait
-			while (fifoCount < packetSize)
-				fifoCount = mpu.getFIFOCount();
-			// read a packet from FIFO
-			mpu.getFIFOBytes(fifoBuffer, packetSize);
-        
-			// track FIFO count here in case there is > 1 packet available
-			// (this lets us immediately read more without waiting for an interrupt)
-			fifoCount -= packetSize;
-
-			mpu.dmpGetQuaternion(&q, fifoBuffer);
-			diff.w = q.w - last.w;
-			diff.x = q.x - last.x;
-			diff.y = q.y - last.y;
-			diff.z = q.z - last.z;
-
-			if (diff.w < 0.0000001 && diff.x < 0.0000001 && diff.y < 0.0000001 && diff.z < 0.0000001) {
-				Serial.println("  MPU stabilised");
-				done = true;
-			}
-
+			avg = alpha * avg + (1.0 - alpha) * (dw + dx + dy + dz);
+			
 			last.w = q.w;
 			last.x = q.x;
 			last.y = q.y;
 			last.z = q.z;
+
+			if (cnt == 0 && avg < 0.000001)
+				break;
+
+			cnt --;
 		}
 	}	
 
-	mpu.setXAccelOffset(mpu.getXAccelOffset());
-	mpu.setYAccelOffset(mpu.getYAccelOffset());
-	mpu.setZAccelOffset(mpu.getZAccelOffset());
-	mpu.setXGyroOffset(mpu.getXGyroOffset());
-	mpu.setYGyroOffset(mpu.getYGyroOffset());
-	mpu.setZGyroOffset(mpu.getZGyroOffset());
+	// Save to EEPROM
+	off_ax = mpu.getXAccelOffset();
+	off_ax = mpu.getYAccelOffset();
+	off_ax = mpu.getZAccelOffset();
+	off_gx = mpu.getXGyroOffset();
+	off_gy = mpu.getYGyroOffset();
+	off_gz = mpu.getZGyroOffset();
+	
+	// Set offsets	
+	mpu.setXAccelOffset(off_ax);
+	mpu.setYAccelOffset(off_ay);
+	mpu.setZAccelOffset(off_az);
+	mpu.setXGyroOffset(off_gx);
+	mpu.setYGyroOffset(off_gy);
+	mpu.setZGyroOffset(off_gz);
 }
 
-// Setup
+/* ----- MPU6050 Interrupt detection routine ----- */
+
+volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
+void dmpDataReady()
+{
+    mpuInterrupt = true;
+}
+
+/* -----  Setup ----- */
 void setup()
 {
 	// Start serial console
@@ -191,29 +224,30 @@ void setup()
 	Serial.print(RAVEN_VERSION);
 	Serial.println(F(" starting"));
 
-	Serial.println(F("> Initializing SBUS"));
+	Serial.println(F("> Initializing SBUS RX"));
 	xsr.begin();
 	
 	// Join I2C bus (I2Cdev library doesn't do this automatically)
 	Serial.println(F("> Initializing I2C bus"));
         Wire.begin();
-        Wire.setClock(400000); // 400kHz I2C clock. Comment this line if having compilation difficulties
+        Wire.setClock(400000); // 400kHz I2C clock
 
-	delay(5000);
+	delay(2000);
 
 	// Initialize MPU
 	Serial.println(F("> Initializing MPU"));
 	mpu.initialize();
 
+	// Configure the MPU6050 to +/-16g and +/-2000º/s
 	mpu.setFullScaleGyroRange(MPU6050_GYRO_FS_2000);
-    	mpu.setFullScaleAccelRange(MPU6050_ACCEL_FS_2);
+    	mpu.setFullScaleAccelRange(MPU6050_ACCEL_FS_16);
 
 	pinMode(MPU6050_PIN_INT, INPUT);
 
 	// Check connection w/ MPU
-	while(!mpu.testConnection()) {
+	if (!mpu.testConnection()) {
 		Serial.println(F("  Connection to MPU6050 failed !"));
-		delay(500);
+		while(true);
 	}
 
 	// Configure DMP
@@ -222,11 +256,11 @@ void setup()
 	
 	// Check MPU status
 	if (devStatus == 0) {
-		// turn on the DMP, now that it's ready
+		// Turn on the DMP, now that it's ready
 		Serial.println(F("  Enabling DMP..."));
 		mpu.setDMPEnabled(true);
 
-		// enable interrupt detection
+		// Enable interrupt detection
 		Serial.print(F("  Enabling interrupt detection on PIN "));
 		Serial.println(MPU6050_PIN_INT);
 		
@@ -276,80 +310,41 @@ void channels_dump()
 		Serial.println();
 }
 	
-// Main loop
+/* ----- Main loop ----- */
 void loop()
 {
 	unsigned long now = millis();
+	float throttle = 0.0;
 	
-	do {
-		// Get user commands
-		if (xsr.readCal(&channels[0], &failSafe, &lostFrames)) {
+	// Get user commands
+	if (xsr.readCal(&channels[0], &failSafe, &lostFrames)) {
+		
+		if (failSafe) {
 			// Out of range, stop everything :-/
-/*			if (failSafe) {
-				// do something ...
-				Serial.println(F("!!! OUT OF RANGE !!!"));				
-				m_FR.set_speed(0);
-				m_FL.set_speed(0);
-				m_BR.set_speed(0);
-				m_BL.set_speed(0);
-				
-				return;
-			}*/				
+			// do something ...
+			Serial.println(F("!!! OUT OF RANGE !!!"));				
+			m_FR.set_speed(0);
+			m_FL.set_speed(0);
+			m_BR.set_speed(0);
+			m_BL.set_speed(0);
 			
-			buzzer = (channels[SBUS_CHANNEL_BUZZER] < 0.0);
-			
-			armed = (channels[SBUS_CHANNEL_ARMED] >= 0.0);
-			if (!armed) {
-				throttle = pitch = roll = yaw = 0.0;		
-			} else {			
-				throttle = (1.0 + channels[SBUS_CHANNEL_THROTTLE]) / 2.0; // 0 -> 1
-				
-				if (throttle > MOTORS_ARM_SPEED) {
-					pitch = channels[SBUS_CHANNEL_PITCH]; // -1 -> 1
-					roll = channels[SBUS_CHANNEL_ROLL];   // -1 -> 1
-					yaw = channels[SBUS_CHANNEL_YAW];     // -1 -> 1
-				} else
-					throttle = MOTORS_ARM_SPEED;
-			}
+			return;
+		}				
+
+		if (channels[CMD_ARMED_ID] >= 0.0) {
+			// Translate throttle value between [0;1] rather than [-1;1]
+			throttle = MOTORS_ARM_SPEED + (1.0 - MOTORS_ARM_SPEED) * (1.0 + channels[CMD_THROTTLE_ID]) * 0.5;
 		} 
-	} while(!mpuInterrupt && fifoCount < packetSize);
+	}
 
-
-	// reset interrupt flag and get INT_STATUS byte
-	mpuInterrupt = false;
-	mpuIntStatus = mpu.getIntStatus();
-
-	// get current FIFO count
-	fifoCount = mpu.getFIFOCount();
-
-	// check for overflow (this should never happen unless our code is too inefficient)
-	if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
-		// reset so we can continue cleanly
-		mpu.resetFIFO();
-		Serial.println(F("MPU FIFO overflow !"));
-
-		// otherwise, check for DMP data ready interrupt (this should happen frequently)
-	} else if (mpuIntStatus & 0x02) {
-		// wait for correct available data length, should be a VERY short wait
-		while (fifoCount < packetSize)
-			fifoCount = mpu.getFIFOCount();
-
-		// read a packet from FIFO
-		mpu.getFIFOBytes(fifoBuffer, packetSize);
-        
-		// track FIFO count here in case there is > 1 packet available
-		// (this lets us immediately read more without waiting for an interrupt)
-		fifoCount -= packetSize;
-
-		mpu.dmpGetQuaternion(&q, fifoBuffer);
-	        mpu.dmpGetGravity(&gravity, &q);
-    		mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-
+	// Get attitude
+	float yaw, pitch, roll;
+	if (mpu_read_ypr(&yaw, &pitch, &roll)) {
 		Serial.print("ypr\t");
-    		Serial.print(ypr[0] * 180/M_PI);
+    		Serial.print(yaw * 180/M_PI);
     		Serial.print("\t");
-    		Serial.print(ypr[1] * 180/M_PI);
+    		Serial.print(pitch * 180/M_PI);
     		Serial.print("\t");
-    		Serial.println(ypr[2] * 180/M_PI);
+    		Serial.println(roll * 180/M_PI);
 	}
 }
