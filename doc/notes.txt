@@ -1,0 +1,38 @@
+TODO:
+
+Wiring:
+. Move PINs 9&10 to PINs 21&22: free the SPI bus
+. Attach S-Port from XSR to PIN 8
+. Add a GND bar near the teensy
+. Attach Connect buzzer to PIN 6 (PWM)
+. Attach 2/3 LEDs on PINs 3,4 & 5: RED = LEFT, GREEN = RIGHT, WHITE = BACK
+. Board w/ MPU & HMC, if possible BMP: I2C wiring + resistor
+
+Program:
+. New structure attitude:
+  . pitch, roll, yaw angular speeds (rads or deg /s ?)
+  . x,y,z acceleration (in g or in m.s-2 ?)
+  . pitch, roll angles (radians or degrees ?)
+  . heading (rads or deg ?)
+  . vertical speed (m.s-1)
+  . previous value to calculate speeds
+  
+. Initialize MPU, HMC, BMP
+. Calibrate the sensors
+
+. Main loop:
+  . Delta time dt in (µs or ms ?)
+   
+  . Read raw values from mpu
+  . Read raw value from compass
+  . Read raw value from barometer
+  
+  . Convert accel/gyro: https://www.i2cdevlib.com/forums/topic/4-understanding-raw-values-of-accelerometer-and-gyrometer/
+    . Compute accelerations
+  . Use the complementary filter to stabilize the values
+  . Compensate roll/pitch to compute heading
+  . Compute angular speeds (w/ dt) 
+  . Computer vertical speed (w/ dt)
+
+
+
