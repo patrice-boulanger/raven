@@ -13,9 +13,6 @@
 
 #define RAVEN_VERSION "0.2.2"
 
-// MPU6050 Interrupt PIN
-const uint8_t MPU6050_PIN_INT = 6;
-
 // User commands index
 const uint8_t CMD_THROTTLE_ID = 0;
 const uint8_t CMD_YAW_ID = 1;

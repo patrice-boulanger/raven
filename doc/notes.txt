@@ -1,12 +1,12 @@
 TODO:
 
 Wiring:
-. Move PINs 9&10 to PINs 21&22: free the SPI bus
-. Attach S-Port from XSR to PIN 8
-. Add a GND bar near the teensy
-. Attach Connect buzzer to PIN 6 (PWM)
-. Attach 2/3 LEDs on PINs 3,4 & 5: RED = LEFT, GREEN = RIGHT, WHITE = BACK
-. Board w/ MPU & HMC, if possible BMP: I2C wiring + resistor
+DONE . Move PINs 9&10 to PINs 21&22: free the SPI bus
+DONE . Attach S-Port from XSR to PIN 8
+DONE . Add a GND bar near the teensy
+DONE . Attach Connect buzzer to PIN 6 (PWM)
+DONE . Attach 2/3 LEDs on PINs 3,4 & 5: RED = LEFT, GREEN = RIGHT, WHITE = BACK
+DONE . Board w/ MPU & HMC, if possible BMP: I2C wiring + resistor
 
 Program:
 . New structure attitude:
