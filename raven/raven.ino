@@ -31,8 +31,8 @@ PID *pid_BL;
 
 MPU6050 mpu;
 // Calibration offsets 
-int off_ax = 0, off_ay = 0, off_az = 0;
-int off_gx = 0, off_gy = 0, off_gz = 0;
+int off_ax = -989, off_ay = -492, off_az = 1557;
+int off_gx = 36, off_gy = 1, off_gz = 26;
 
 #include "HMC5883L.h"
 HMC5883L compass;
@@ -81,6 +81,7 @@ unsigned long timer = 0;
 unsigned long dt_loop = 0;
 
 /* ----- Get drone attitude ----- */
+#define DEG2RAD (M_PI/180.0)
 
 void get_attitude(unsigned long ms)
 {
@@ -100,9 +101,10 @@ void get_attitude(unsigned long ms)
 	attitude.z_acc = (9.81 * az) / 16384.0;
 	
 	// Angular speeds (rads.s-1)
-        attitude.x_rate = gx / 131.0;
-        attitude.y_rate = gy / 131.0;
-        attitude.z_rate = gz / 131.0;
+	// The sensor returns deg.s-1
+        attitude.x_rate = (gx * DEG2RAD) / 131.0; 
+        attitude.y_rate = (gy * DEG2RAD)/ 131.0;
+        attitude.z_rate = (gz * DEG2RAD)/ 131.0;
 
         // Orientation of the accelerometer relative to the earth
         float x_angle = atan2(ay, az);
@@ -116,33 +118,40 @@ void get_attitude(unsigned long ms)
 	attitude.heading_p = attitude.heading;
 
 	int16_t mx, my, mz, temp;
+
+	while(!compass.getReadyStatus());
 	compass.getHeading(&mx, &my, &mz);
 
-	// Swap X/Y to match MPU disposal on the board
-	temp = mx;
-	mx = -my;
-	my = temp;
+	if (mx == -4096 || mx == -4096 || mz == -4096) {
+		Serial.println("Compass overflow");
+	} else {
 	
-	float cosRoll = cos(attitude.roll);
-  	float sinRoll = sin(attitude.roll);  
-  	float cosPitch = cos(attitude.pitch);
-  	float sinPitch = sin(attitude.pitch);
-  
-  	// Tilt compensation
-  	float Xh = mx * cosPitch + mz * sinPitch;
-  	float Yh = mx * sinRoll * sinPitch + my * cosRoll - mz * sinRoll * cosPitch;
- 
-  	attitude.heading = atan2(Yh, Xh) + off_decl;
-
-	// Correct angle if necessary
-	if (attitude.heading < 0) 
-		attitude.heading += 2 * PI; 
-  	if (attitude.heading > 2 * PI) 
-  		attitude.heading -= 2 * PI;  
-
-  	// Angular speed
-  	attitude.rspeed = (attitude.heading - attitude.heading_p) / dt;
-
+		// Swap X/Y to match MPU disposal on the board
+		temp = mx;
+		mx = -my;
+		my = temp;
+		
+		float cosRoll = cos(attitude.roll);
+	  	float sinRoll = sin(attitude.roll);  
+	  	float cosPitch = cos(attitude.pitch);
+	  	float sinPitch = sin(attitude.pitch);
+	  
+	  	// Tilt compensation
+	  	float Xh = mx * cosPitch + mz * sinPitch;
+	  	float Yh = mx * sinRoll * sinPitch + my * cosRoll - mz * sinRoll * cosPitch;
+	 
+	  	attitude.heading = atan2(Yh, Xh) + off_decl;
+	
+		// Correct angle if necessary
+		if (attitude.heading < 0) 
+			attitude.heading += 2 * PI; 
+	  	if (attitude.heading > 2 * PI) 
+	  		attitude.heading -= 2 * PI;  
+	
+	  	// Angular speed
+	  	attitude.rspeed = (attitude.heading - attitude.heading_p) / dt;
+	}
+	
   	// request temperature
     	barometer.setControl(BMP085_MODE_TEMPERATURE);
     
@@ -192,6 +201,8 @@ void calibrate()
 		sum_gx += gx;
 		sum_gy += gy;
 		sum_gz += gz;
+
+		delay(4);
 	}
 
 	off_ax = sum_ax / N_CALIBRATION;
@@ -260,62 +271,6 @@ void setup()
 
 	delay(2000);
 
-	// Initialize MPU
-	Serial.println(F("> Initializing MPU"));
-	mpu.initialize();
-
-	// Check connection w/ MPU
-	if (!mpu.testConnection()) {
-		Serial.println(F("  Connection to MPU6050 failed !"));
-		while(true);
-	}
-
-	//0 = +/- 250 degrees/sec | 1 = +/- 500 degrees/sec | 2 = +/- 1000 degrees/sec | 3 =  +/- 2000 degrees/sec
-	mpu.setFullScaleGyroRange(0); 
-	//0 = +/- 2g | 1 = +/- 4g | 2 = +/- 8g | 3 =  +/- 16g
-  	mpu.setFullScaleAccelRange(0);   
-
-	Serial.print("  Calibration ");
-	Serial.print("    Current offsets: ");
-	Serial.print("Acc(");
-	Serial.print(mpu.getXAccelOffset());
-	Serial.print(",");
-	Serial.print(mpu.getYAccelOffset());
-	Serial.print(",");
-	Serial.print(mpu.getZAccelOffset());
-	Serial.print(") Gyr(");
-	Serial.print(mpu.getXGyroOffset());
-	Serial.print(",");
-	Serial.print(mpu.getYGyroOffset());
-	Serial.print(",");
-	Serial.print(mpu.getZGyroOffset());
-	Serial.println(")");
-	
-	calibrate();
-
-	mpu.setXAccelOffset(off_ax);
-	mpu.setYAccelOffset(off_ay);
-	mpu.setZAccelOffset(off_az);
-
-	mpu.setXGyroOffset(off_gx);
-	mpu.setYGyroOffset(off_gy);
-	mpu.setZGyroOffset(off_gz);
-	
-	Serial.print("    New offsets: ");
-	Serial.print("Acc(");
-	Serial.print(mpu.getXAccelOffset());
-	Serial.print(",");
-	Serial.print(mpu.getYAccelOffset());
-	Serial.print(",");
-	Serial.print(mpu.getZAccelOffset());
-	Serial.print(") Gyr(");
-	Serial.print(mpu.getXGyroOffset());
-	Serial.print(",");
-	Serial.print(mpu.getYGyroOffset());
-	Serial.print(",");
-	Serial.print(mpu.getZGyroOffset());
-	Serial.println(")");
-	
 	// Initialize compass
 	Serial.println("> Initializing compass");
 	compass.initialize();
@@ -326,6 +281,9 @@ void setup()
 		while(true);
 	}
 
+	compass.setMode(HMC5883L_MODE_CONTINUOUS);
+	compass.setSampleAveraging(HMC5883L_AVERAGING_8);
+	
   	// Configure
 	off_decl = (off_decl_deg + (off_decl_min / 60.0)) * (M_PI / 180.0); 
   	
@@ -346,7 +304,63 @@ void setup()
 		Serial.println(F("  Connection to BMP180 failed !"));
 		while(true);
 	}
+
+	// Initialize MPU
+	Serial.println(F("> Initializing MPU"));
+	mpu.initialize();
+
+	// Check connection w/ MPU
+	if (!mpu.testConnection()) {
+		Serial.println(F("  Connection to MPU6050 failed !"));
+		while(true);
+	}
+
+	//0 = +/- 250 degrees/sec | 1 = +/- 500 degrees/sec | 2 = +/- 1000 degrees/sec | 3 =  +/- 2000 degrees/sec
+	mpu.setFullScaleGyroRange(MPU6050_GYRO_FS_250); 
+	//0 = +/- 2g | 1 = +/- 4g | 2 = +/- 8g | 3 =  +/- 16g
+  	mpu.setFullScaleAccelRange(MPU6050_ACCEL_FS_2);   
+/*
+	Serial.print("  Calibration ");
+	Serial.print("    Current offsets: ");
+	Serial.print("Acc(");
+	Serial.print(mpu.getXAccelOffset());
+	Serial.print(",");
+	Serial.print(mpu.getYAccelOffset());
+	Serial.print(",");
+	Serial.print(mpu.getZAccelOffset());
+	Serial.print(") Gyr(");
+	Serial.print(mpu.getXGyroOffset());
+	Serial.print(",");
+	Serial.print(mpu.getYGyroOffset());
+	Serial.print(",");
+	Serial.print(mpu.getZGyroOffset());
+	Serial.println(")");
 	
+	calibrate();
+*/
+	mpu.setXAccelOffset(off_ax);
+	mpu.setYAccelOffset(off_ay);
+	mpu.setZAccelOffset(off_az);
+
+	mpu.setXGyroOffset(off_gx);
+	mpu.setYGyroOffset(off_gy);
+	mpu.setZGyroOffset(off_gz);
+/*	
+	Serial.print("    New offsets: ");
+	Serial.print("Acc(");
+	Serial.print(mpu.getXAccelOffset());
+	Serial.print(",");
+	Serial.print(mpu.getYAccelOffset());
+	Serial.print(",");
+	Serial.print(mpu.getZAccelOffset());
+	Serial.print(") Gyr(");
+	Serial.print(mpu.getXGyroOffset());
+	Serial.print(",");
+	Serial.print(mpu.getYGyroOffset());
+	Serial.print(",");
+	Serial.print(mpu.getZGyroOffset());
+	Serial.println(")");
+*/	
 	// Clear attitude data
 	memset(&attitude, 0, sizeof(attitude_t));
 	
@@ -354,6 +368,8 @@ void setup()
 	
 	// Initialize loop timer
 	timer = millis();
+
+	delay(20);
 }
 
 // Dump all SBUS channels to serial
@@ -378,25 +394,25 @@ void dump_attitude()
 	Serial.println("-----------------------------------------");
 	
 	Serial.print("Acceleration: ");
-	Serial.print(attitude.x_acc, 2);
+	Serial.print(attitude.x_acc, 1);
 	Serial.print(", ");
-	Serial.print(attitude.y_acc, 2);
+	Serial.print(attitude.y_acc, 1);
 	Serial.print(", ");
-	Serial.println(attitude.z_acc, 2);
+	Serial.println(attitude.z_acc, 1);
 	Serial.print("Angular speed: ");
-	Serial.print(attitude.x_rate * RAD2DEG);
+	Serial.print(attitude.x_rate * RAD2DEG, 1);
 	Serial.print(", ");
-	Serial.print(attitude.y_rate * RAD2DEG);
+	Serial.print(attitude.y_rate * RAD2DEG, 1);
 	Serial.print(", ");
-	Serial.println(attitude.z_rate * RAD2DEG);
+	Serial.println(attitude.z_rate * RAD2DEG, 1);
 	Serial.print("Pitch/Roll: ");
-	Serial.print(attitude.pitch * RAD2DEG);
+	Serial.print(attitude.pitch * RAD2DEG, 1);
 	Serial.print("/");
-	Serial.println(attitude.roll * RAD2DEG);
+	Serial.println(attitude.roll * RAD2DEG, 1);
 	Serial.print("Heading/R-Speed: ");
-	Serial.print(attitude.heading * RAD2DEG);
+	Serial.print(attitude.heading * RAD2DEG, 1);
 	Serial.print("/");
-	Serial.println(attitude.rspeed * RAD2DEG);
+	Serial.println(attitude.rspeed * RAD2DEG, 1);
 	Serial.print("Altitude/V-Speed: ");
 	Serial.print(attitude.altitude);
 	Serial.print("/");
