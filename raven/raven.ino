@@ -30,7 +30,7 @@ PID *pid_BL;
 //#include "MPU6050_6Axis_MotionApps20.h"
 
 MPU6050 mpu;
-// Calibration offsets 
+// Calibration offsets: computed w/ I2Cdev IMU_Zero sketch
 int off_ax = -989, off_ay = -492, off_az = 1557;
 int off_gx = 36, off_gy = 1, off_gz = 26;
 
@@ -39,7 +39,7 @@ HMC5883L compass;
 
 // Calibration offsets
 // Paris
-float off_decl_deg = 0, off_decl_min = 57.96; // declinaison angle degrees/minutes
+float off_decl_deg = 0, off_decl_min = 57.96; // declinaison angle degrees/minutes for Paris
 float off_decl = 0.0; // declinaison angle
 
 #include "BMP085.h"
@@ -64,6 +64,9 @@ typedef struct {
 
 attitude_t attitude;
 
+const float RAD2DEG = 180.0/M_PI;
+const float DEG2RAD = M_PI/180.0;
+
 /* 
  * Use bolderflight SBUS library for Teensy 
  * https://github.com/bolderflight/SBUS.git
@@ -81,8 +84,6 @@ unsigned long timer = 0;
 unsigned long dt_loop = 0;
 
 /* ----- Get drone attitude ----- */
-#define DEG2RAD (M_PI/180.0)
-
 void get_attitude(unsigned long ms)
 {
 	// delta time (in seconds)
@@ -170,22 +171,20 @@ void get_attitude(unsigned long ms)
     	attitude.pressure = barometer.getPressure();
 
     	// calculate absolute altitude in meters based on known pressure
-    	// (may pass a second "sea level pressure" parameter here,
-    	// otherwise uses the standard value of 101325 Pa)
     	attitude.altitude_p = attitude.altitude;  
     	attitude.altitude = barometer.getAltitude(attitude.pressure);
 
 	// Vertical speed
     	attitude.vspeed = (attitude.altitude - attitude.altitude_p) / dt;
-}
+}	
 
 /* ----- Calibrate ----- */
 #define N_CALIBRATION 2000
 
 void calibrate()
 {
-	delay(2500);
-	
+	delay(500);
+
 	int16_t ax, ay, az, gx, gy, gz;
 	
 	float sum_ax = 0, sum_ay = 0, sum_az = 0;
@@ -211,7 +210,7 @@ void calibrate()
 
 	off_gx = sum_gx / N_CALIBRATION;
 	off_gy = sum_gy / N_CALIBRATION;
-	off_gz = sum_gz / N_CALIBRATION;
+	off_gz = sum_gz / N_CALIBRATION;	
 }
 
 /* ----- Flight controller ----- */
@@ -270,6 +269,9 @@ void setup()
         Wire.setClock(400000); // 400kHz I2C clock
 
 	delay(2000);
+
+	// Clear attitude data
+	memset(&attitude, 0, sizeof(attitude_t));
 
 	// Initialize compass
 	Serial.println("> Initializing compass");
@@ -360,11 +362,9 @@ void setup()
 	Serial.print(",");
 	Serial.print(mpu.getZGyroOffset());
 	Serial.println(")");
-*/	
-	// Clear attitude data
-	memset(&attitude, 0, sizeof(attitude_t));
-	
+*/		
 	Serial.println(F("Ready"));
+	Serial.println(F("ax,ay,az,gx,gy,gz,pitch,roll,heading,rspeed,altitude,vspeed,temperature,pressure"));
 	
 	// Initialize loop timer
 	timer = millis();
@@ -388,41 +388,34 @@ void dump_channels()
 
 // Dump attitude to serial
 void dump_attitude()
-{
-	float RAD2DEG = 180.0/M_PI;
-	
-	Serial.println("-----------------------------------------");
-	
-	Serial.print("Acceleration: ");
+{	
 	Serial.print(attitude.x_acc, 1);
-	Serial.print(", ");
+	Serial.print(",");
 	Serial.print(attitude.y_acc, 1);
 	Serial.print(", ");
-	Serial.println(attitude.z_acc, 1);
-	Serial.print("Angular speed: ");
+	Serial.print(attitude.z_acc, 1);
+	Serial.print(", ");
 	Serial.print(attitude.x_rate * RAD2DEG, 1);
 	Serial.print(", ");
 	Serial.print(attitude.y_rate * RAD2DEG, 1);
 	Serial.print(", ");
-	Serial.println(attitude.z_rate * RAD2DEG, 1);
-	Serial.print("Pitch/Roll: ");
+	Serial.print(attitude.z_rate * RAD2DEG, 1);
+	Serial.print(", ");
 	Serial.print(attitude.pitch * RAD2DEG, 1);
-	Serial.print("/");
-	Serial.println(attitude.roll * RAD2DEG, 1);
-	Serial.print("Heading/R-Speed: ");
+	Serial.print(", ");
+	Serial.print(attitude.roll * RAD2DEG, 1);
+	Serial.print(", ");
 	Serial.print(attitude.heading * RAD2DEG, 1);
-	Serial.print("/");
-	Serial.println(attitude.rspeed * RAD2DEG, 1);
-	Serial.print("Altitude/V-Speed: ");
+	Serial.print(", ");
+	Serial.print(attitude.rspeed * RAD2DEG, 1);
+	Serial.print(", ");
 	Serial.print(attitude.altitude);
-	Serial.print("/");
-	Serial.println(attitude.vspeed);
-	Serial.print("Temperature/Pressure: ");
+	Serial.print(", ");
+	Serial.print(attitude.vspeed);
+	Serial.print(", ");
 	Serial.print(attitude.temperature);
-	Serial.print("/");
+	Serial.print(", ");
 	Serial.println(attitude.pressure);
-
-	Serial.println("-----------------------------------------");
 }
 
 /* ----- Main loop ----- */
@@ -460,8 +453,4 @@ void loop()
 	// Loop execution time
 	unsigned long end = millis();
 	dt_loop = end - start;
-
-	Serial.print("dt loop = ");
-	Serial.print(dt_loop);
-	Serial.println(" ms");
 }
