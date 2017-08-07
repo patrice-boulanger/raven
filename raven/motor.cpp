@@ -17,7 +17,7 @@ Motor::~Motor()
 	esc.writeMicroseconds(0);
 }
 
-void Motor::set_speed(uint16_t pulse)
+void Motor::set_pulse(uint16_t pulse)
 {
 	if (pulse < min_pulse) pulse = min_pulse;
 	if (pulse > max_pulse) pulse = max_pulse;
@@ -26,7 +26,7 @@ void Motor::set_speed(uint16_t pulse)
 	speed = pulse;
 }
 	
-uint16_t Motor::get_speed()
+uint16_t Motor::get_pulse()
 {
 	return speed;
 }

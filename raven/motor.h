@@ -13,9 +13,9 @@ public:
 	/*
 	 * Set the speed of the motor
 	 */
-	void set_speed(uint16_t pulse);
+	void set_pulse(uint16_t pulse);
 
-	uint16_t get_speed();
+	uint16_t get_pulse();
 
 protected:
 	Servo esc;
