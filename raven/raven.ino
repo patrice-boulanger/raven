@@ -45,6 +45,9 @@ float off_decl = 0.0; // declinaison angle
 #include "BMP085.h"
 BMP085 barometer;
 
+// Number of samples for altitude measurement
+#define ALT_SAMPLES		20
+
 // Drone attitude
 typedef struct {
 	float x_acc, y_acc, z_acc;	// acceleration (m.s-2)
@@ -54,16 +57,25 @@ typedef struct {
 
 	float heading, heading_p;	// current & previous heading (rads)
 	float rspeed;			// Angular speed (rads.s-1)
+
+	float pressure;			// pressure (pa)
+	float temperature;		// temperature (deg. C)
+	
+	float alt_samples[ALT_SAMPLES]; // Altitude samples
+	int alt_idx;			// Current index in buffer
 	
 	float altitude, altitude_p;	// current & previous altitude (m)
 	float vspeed;			// vertical speed (m.s-1)
 
-	float pressure;			// pressure (pa)
-	float temperature;		// temperature (deg. C)
 } attitude_t;
 
 attitude_t attitude;
-
+// Flight status
+int status;
+float throttle = 0;
+bool armed = false;
+	
+// Degrees/radians conversion
 const float RAD2DEG = 180.0/M_PI;
 const float DEG2RAD = M_PI/180.0;
 
@@ -172,8 +184,16 @@ void get_attitude(unsigned long ms)
 
     	// calculate absolute altitude in meters based on known pressure
     	attitude.altitude_p = attitude.altitude;  
-    	attitude.altitude = barometer.getAltitude(attitude.pressure);
+	
+	attitude.alt_samples[attitude.alt_idx] = barometer.getAltitude(attitude.pressure);
+	attitude.alt_idx = (attitude.alt_idx + 1) % ALT_SAMPLES;
 
+	attitude.altitude = 0;
+	for(int i = 0; i < ALT_SAMPLES; i ++) 
+		attitude.altitude += attitude.alt_samples[i];
+
+	attitude.altitude /= ALT_SAMPLES;
+	
 	// Vertical speed
     	attitude.vspeed = (attitude.altitude - attitude.altitude_p) / dt;
 }	
@@ -244,10 +264,10 @@ void set_motor_speed_manual(float cmd_throttle, float cmd_yaw, float cmd_pitch, 
 	back_right_speed   += 0.15 * (- roll + pitch + yaw) / 3;
 */
 	
-	m_FR.set_speed(front_right_speed);
-	m_FL.set_speed(front_left_speed);
-	m_BR.set_speed(back_right_speed);
-	m_BL.set_speed(back_left_speed);
+	m_FR.set_pulse(front_right_speed);
+	m_FL.set_pulse(front_left_speed);
+	m_BR.set_pulse(back_right_speed);
+	m_BL.set_pulse(back_left_speed);
 }
 
 /* -----  Setup ----- */
@@ -364,10 +384,11 @@ void setup()
 	Serial.println(")");
 */		
 	Serial.println(F("Ready"));
-	Serial.println(F("ax,ay,az,gx,gy,gz,pitch,roll,heading,rspeed,altitude,vspeed,temperature,pressure"));
-	
+
 	// Initialize loop timer
 	timer = millis();
+
+	status = FLIGHT_STATUS_STOP;
 
 	delay(20);
 }
@@ -389,25 +410,25 @@ void dump_channels()
 // Dump attitude to serial
 void dump_attitude()
 {	
-	Serial.print(attitude.x_acc, 1);
+	Serial.print(attitude.x_acc, 2);
 	Serial.print(",");
-	Serial.print(attitude.y_acc, 1);
+	Serial.print(attitude.y_acc, 2);
 	Serial.print(", ");
-	Serial.print(attitude.z_acc, 1);
+	Serial.print(attitude.z_acc, 2);
 	Serial.print(", ");
-	Serial.print(attitude.x_rate * RAD2DEG, 1);
+	Serial.print(attitude.x_rate * RAD2DEG, 2);
 	Serial.print(", ");
-	Serial.print(attitude.y_rate * RAD2DEG, 1);
+	Serial.print(attitude.y_rate * RAD2DEG, 2);
 	Serial.print(", ");
-	Serial.print(attitude.z_rate * RAD2DEG, 1);
+	Serial.print(attitude.z_rate * RAD2DEG, 2);
 	Serial.print(", ");
-	Serial.print(attitude.pitch * RAD2DEG, 1);
+	Serial.print(attitude.pitch * RAD2DEG, 2);
 	Serial.print(", ");
-	Serial.print(attitude.roll * RAD2DEG, 1);
+	Serial.print(attitude.roll * RAD2DEG, 2);
 	Serial.print(", ");
-	Serial.print(attitude.heading * RAD2DEG, 1);
+	Serial.print(attitude.heading * RAD2DEG, 2);
 	Serial.print(", ");
-	Serial.print(attitude.rspeed * RAD2DEG, 1);
+	Serial.print(attitude.rspeed * RAD2DEG, 2);
 	Serial.print(", ");
 	Serial.print(attitude.altitude);
 	Serial.print(", ");
@@ -421,36 +442,91 @@ void dump_attitude()
 /* ----- Main loop ----- */
 void loop()
 {	
-	float throttle = 0;
+	unsigned int base_pulse;
 	
-	unsigned long start = millis(), dt = start - timer;
+	unsigned long start = millis(),	dt = start - timer;
 	timer = start;
 	
 	// Get user commands
-	if (xsr.readCal(&channels[0], &failSafe, &lostFrames)) {
-		
-		if (failSafe) {
-			// Out of range, stop everything :-/
-			// do something ...
-//			Serial.println(F("!!! OUT OF RANGE !!!"));				
-			m_FR.set_speed(0);
-			m_FL.set_speed(0);
-			m_BR.set_speed(0);
-			m_BL.set_speed(0);
-			
-//			return;
-		}				
-
-		if (channels[CMD_ARMED_ID] >= 0.0) {
-			// Translate throttle value between [0;1] rather than [-1;1]
-			throttle = MOTOR_ARMED_SPEED + (1.0 - MOTOR_ARMED_SPEED) * (1.0 + channels[CMD_THROTTLE_ID]) * 0.5;
-		} 
+	if (!xsr.readCal(&channels[0], &failSafe, &lostFrames)) {
+		// Not connected or short packet read
+		return;
 	}
 
-	get_attitude(dt);
-	dump_attitude();
+	if (failSafe) {
+		// Out of range, stop everything :-/
+		Serial.println(F(" -!-!-!- OUT OF RANGE -!-!-!-"));				
+		status = FLIGHT_STATUS_SAFE;
+		base_pulse = ESC_PULSE_MIN_WIDTH;
+	}  
 
-	// Loop execution time
-	unsigned long end = millis();
-	dt_loop = end - start;
+	// Get throttle value, translated from [-1;1] -> [0;1]
+	throttle = (1.0 + channels[CMD_THROTTLE_ID]) / 2; 
+	// Arm switch
+	armed = (channels[CMD_ARMED_ID] >= 0);
+		
+	if (status == FLIGHT_STATUS_SAFE) {
+		// Change status from SAFE to STOP only if throttle is 0 and switch is NOT armed
+		if (!armed && throttle < 0.03) {
+			status = FLIGHT_STATUS_STOP;
+		} else{
+			// Stay safe
+			//Serial.println("Throttle warning");
+		} 
+		
+		base_pulse = ESC_PULSE_MIN_WIDTH;
+	}
+	
+	if (status == FLIGHT_STATUS_STOP) {
+		// Change status from STOP to ARMED only if throttle is 0 and switch IS armed
+		if (armed) {
+			if (throttle < 0.03) {
+				status = FLIGHT_STATUS_ARMED;
+				base_pulse = ESC_PULSE_SPEED_0_WIDTH;
+				Serial.println("Motors armed");
+			} else {
+				status = FLIGHT_STATUS_SAFE;
+				base_pulse = ESC_PULSE_MIN_WIDTH;
+			}
+		} else {
+			base_pulse = ESC_PULSE_MIN_WIDTH;
+		}
+	}
+	
+	if (status == FLIGHT_STATUS_ARMED) {
+		if (!armed) {
+			status = FLIGHT_STATUS_STOP;
+			base_pulse = ESC_PULSE_MIN_WIDTH;
+			Serial.println("Motors stop");
+		} else {
+			base_pulse = ESC_PULSE_SPEED_0_WIDTH + throttle * (ESC_PULSE_SPEED_FULL_WIDTH - ESC_PULSE_SPEED_0_WIDTH);
+		}
+	}
+
+	// Pulse width for each motors, initialized at throttle speed
+	int16_t esc_fr, esc_fl, esc_br, esc_bl;
+	esc_fr = esc_fl = esc_br = esc_bl = base_pulse;
+
+	if (status == FLIGHT_STATUS_ARMED) {
+		Serial.print("pulse = ");
+		Serial.print(base_pulse);
+		Serial.println("ms");
+	} else {
+		Serial.print("status = ");
+		Serial.println(status);		
+	}
+	
+	//get_attitude(dt);
+	//dump_attitude();
+/*
+	m_FR.set_pulse(esc_fr);
+	m_FL.set_pulse(esc_fl);
+	m_BR.set_pulse(esc_br);
+	m_BL.set_pulse(esc_bl);
+*/
+/*
+	Serial.print("dt =");
+	Serial.print((float)(dt) / 1000, 3);
+	Serial.println("ms");
+*/
 }
