@@ -6,15 +6,11 @@ Motor m_FL(ESC_PIN_FL);
 Motor m_BR(ESC_PIN_BR);
 Motor m_BL(ESC_PIN_BL);
 
-/*
- * Use br3ttb PID library
- * https://github.com/br3ttb/Arduino-PID-Library
- */
-#include "PID_v1.h"
-PID *pid_FR;
-PID *pid_FL;
-PID *pid_BR;
-PID *pid_BL;
+#include "PID.h"
+PID pid_FR;
+PID pid_FL;
+PID pid_BR;
+PID pid_BL;
 
 /*
  * Use jrowberg I2Cdev library for MPU6050, HMC5883L & BMP085/180
@@ -415,7 +411,7 @@ void loop()
 	if (failSafe) {
 	        Serial.println(F(" -!-!-!- OUT OF RANGE -!-!-!-"));				
 		status = FLIGHT_STATUS_SAFE;
-		base_pulse = ESC_PULSE_MIN_WIDTH;
+		base_pulse = 0;
 	}  
 
 	// Translate throttle command from [-1;1] -> [0;1]
@@ -432,7 +428,7 @@ void loop()
 			//Serial.println("Throttle lock safety");
 		} 
 		
-		base_pulse = ESC_PULSE_MIN_WIDTH;
+		base_pulse = 0;
 	}
 
         // Change status from STOP to ARMED only if throttle is 0 and arming switch is on
@@ -444,17 +440,17 @@ void loop()
 				Serial.println("Motors armed");
 			} else {
 				status = FLIGHT_STATUS_SAFE;
-				base_pulse = ESC_PULSE_MIN_WIDTH;
+				base_pulse = 0;
 			}
 		} else {
-			base_pulse = ESC_PULSE_MIN_WIDTH;
+			base_pulse = 0;
 		}
 	}
 	
 	if (status == FLIGHT_STATUS_ARMED) {
 		if (!armed) {
 			status = FLIGHT_STATUS_STOP;
-			base_pulse = ESC_PULSE_MIN_WIDTH;
+			base_pulse = 0;
 			Serial.println("Motors stop");
 		} else {
 			base_pulse = ESC_PULSE_SPEED_0_WIDTH + throttle * (ESC_PULSE_SPEED_FULL_WIDTH - ESC_PULSE_SPEED_0_WIDTH);
@@ -478,8 +474,12 @@ void loop()
                         pitch_setpoint = channels[CMD_PITCH_ID] * pitch_max_rate;
                         roll_setpoint = channels[CMD_ROLL_ID] * roll_max_rate;
                 }
-
-                
+/*
+                esc_fr += - roll - pitch - yaw;
+                esc_bl +=   roll + pitch - yaw;
+                esc_fl +=   roll - pitch + yaw;
+                esc_br += - roll + pitch + yaw;
+*/                
         }
 
 	//dump_attitude();
