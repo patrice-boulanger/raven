@@ -2,6 +2,7 @@
 
 PID::PID() 
 {
+        Serror = 0;
         lasterr = 0;
         lasttime = millis();        
 }
@@ -25,6 +26,9 @@ float PID::getKd()
 
 void PID::setKpid(float kp, float ki, float kd)
 {
+        if (kp < 0 || ki < 0 || kd < 0)
+                return;
+        
         Kp = kp;
         Ki = ki;
         Kd = kd;
@@ -45,7 +49,7 @@ float PID::compute(float real, float expected)
         // Error
         float error = expected - real; 
         // Integral of the error
-        float Sedt = ((error + lasterr) * dt) / 2.0;
+        float Sedt = Serror + (error * dt); 
         // Derivative
         float dedt = (error - lasterr) / dt;
 

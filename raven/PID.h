@@ -32,6 +32,9 @@ protected:
         // Bounds
         float minval, maxval;
 
+        // Sum of previous error
+        float Serror;
+
         // Last error 
         float lasterr;
         
