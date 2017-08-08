@@ -13,6 +13,14 @@
 
 #define RAVEN_VERSION "0.2.2"
 
+// LED PINS
+const uint8_t LED_GREEN_PIN = 5;
+const uint8_t LED_RED_PIN = 4;
+const uint8_t LED_WHITE_PIN = 3;
+
+// Buzzer
+const uint8_t BUZZER_PIN = 6;
+
 // User commands index
 const uint8_t CMD_THROTTLE_ID = 0;
 const uint8_t CMD_YAW_ID = 1;
