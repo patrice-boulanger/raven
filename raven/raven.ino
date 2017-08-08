@@ -26,6 +26,7 @@ PID *pid_BL;
     #include "Wire.h"
 #endif
 
+/* --- MPU6050: accelerometer/gyroscope --- */
 #include "MPU6050.h"
 //#include "MPU6050_6Axis_MotionApps20.h"
 
@@ -34,21 +35,25 @@ MPU6050 mpu;
 int off_ax = -989, off_ay = -492, off_az = 1557;
 int off_gx = 36, off_gy = 1, off_gz = 26;
 
+/* --- HMC5883L: magnetometer --- */
 #include "HMC5883L.h"
 HMC5883L compass;
 
 // Calibration offsets
-// Paris
 float off_decl_deg = 0, off_decl_min = 57.96; // declinaison angle degrees/minutes for Paris
 float off_decl = 0.0; // declinaison angle
 
+/* --- BMP180: barometer --- */
 #include "BMP085.h"
 BMP085 barometer;
 
-// Number of samples for altitude measurement
+/* --- Flight Controller Data --- */
+
+// Complementary filter coefficient
+#define ALPHA                   0.96
+// Number of samples for altitude averaging
 #define ALT_SAMPLES		20
 
-// Drone attitude
 typedef struct {
 	float x_acc, y_acc, z_acc;	// acceleration (m.s-2)
 	float x_rate, y_rate, z_rate;	// angular speeds (rads.s-1)
@@ -56,7 +61,7 @@ typedef struct {
 	float pitch, roll;		// pitch/roll angles (rads)
 
 	float heading, heading_p;	// current & previous heading (rads)
-	float rspeed;			// Angular speed (rads.s-1)
+	float rspeed;			// angular speed (rads.s-1)
 
 	float pressure;			// pressure (pa)
 	float temperature;		// temperature (deg. C)
@@ -69,12 +74,20 @@ typedef struct {
 
 } attitude_t;
 
+// Drone attitude
 attitude_t attitude;
-// Flight status
+
+// Flight controller status
 int status;
+
 float throttle = 0;
+// Motor arming switch
 bool armed = false;
-	
+// Buzzer switch
+bool buzzer = false;
+// Camera declinaison angle
+float camera_angle = 0;
+
 // Degrees/radians conversion
 const float RAD2DEG = 180.0/M_PI;
 const float DEG2RAD = M_PI/180.0;
@@ -93,18 +106,17 @@ uint16_t lostFrames = 0;
 
 // Loop timer
 unsigned long timer = 0;
-unsigned long dt_loop = 0;
 
 /* ----- Get drone attitude ----- */
 void get_attitude(unsigned long ms)
 {
-	// delta time (in seconds)
+	// Delta time in seconds
 	float dt = ms / 1000.0;
-	
+
+        // Get raw values from MPU
 	int16_t ax, ay, az;
 	int16_t gx, gy, gz;
-
-	// Get raw values
+	
 	mpu.getAcceleration(&ax, &ay, &az);
 	mpu.getRotation(&gx, &gy, &gz);
 
@@ -124,8 +136,8 @@ void get_attitude(unsigned long ms)
         float y_angle = atan2(-ax, az);
 
         // Pitch and roll angles (rads) corrected w/ complementary filter
-        attitude.roll = 0.96 * (attitude.roll + attitude.x_rate * dt) + 0.04 * x_angle; 
-        attitude.pitch = 0.96 * (attitude.pitch + attitude.y_rate * dt) + 0.04 * y_angle; 
+        attitude.roll = ALPHA * (attitude.roll + attitude.x_rate * dt) + (1 - ALPHA) * x_angle; 
+        attitude.pitch = ALPHA * (attitude.pitch + attitude.y_rate * dt) + (1 - ALPHA) * y_angle; 
 
 	// Backup previous heading
 	attitude.heading_p = attitude.heading;
@@ -137,6 +149,7 @@ void get_attitude(unsigned long ms)
 
 	if (mx == -4096 || mx == -4096 || mz == -4096) {
 		Serial.println("Compass overflow");
+		mx = my = mz = 0;
 	} else {
 	
 		// Swap X/Y to match MPU disposal on the board
@@ -165,24 +178,24 @@ void get_attitude(unsigned long ms)
 	  	attitude.rspeed = (attitude.heading - attitude.heading_p) / dt;
 	}
 	
-  	// request temperature
+  	// Request temperature
     	barometer.setControl(BMP085_MODE_TEMPERATURE);
     
-    	// wait appropriate time for conversion (4.5ms delay)
+    	// Wait appropriate time for conversion (4.5ms delay)
     	unsigned long lastMicros = micros();
     	while (micros() - lastMicros < barometer.getMeasureDelayMicroseconds());
 
-    	// read calibrated temperature value in degrees Celsius
+    	// Read calibrated temperature value in degrees Celsius
     	attitude.temperature = barometer.getTemperatureC();
 
-	// request pressure (3x oversampling mode, high detail, 23.5ms delay)
+	// Request pressure (3x oversampling mode, high detail, 23.5ms delay)
     	barometer.setControl(BMP085_MODE_PRESSURE_3);
     	while (micros() - lastMicros < barometer.getMeasureDelayMicroseconds());
 
-    	// read calibrated pressure value in Pascals (Pa)
+    	// Read calibrated pressure value in Pascals (Pa)
     	attitude.pressure = barometer.getPressure();
 
-    	// calculate absolute altitude in meters based on known pressure
+    	// Calculate absolute altitude in meters based on known pressure
     	attitude.altitude_p = attitude.altitude;  
 	
 	attitude.alt_samples[attitude.alt_idx] = barometer.getAltitude(attitude.pressure);
@@ -197,41 +210,6 @@ void get_attitude(unsigned long ms)
 	// Vertical speed
     	attitude.vspeed = (attitude.altitude - attitude.altitude_p) / dt;
 }	
-
-/* ----- Calibrate ----- */
-#define N_CALIBRATION 2000
-
-void calibrate()
-{
-	delay(500);
-
-	int16_t ax, ay, az, gx, gy, gz;
-	
-	float sum_ax = 0, sum_ay = 0, sum_az = 0;
-	float sum_gx = 0, sum_gy = 0, sum_gz = 0;
-	
-	for(int i = 0; i < N_CALIBRATION; i ++) {
-		mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
-
-		sum_ax += ax;
-		sum_ay += ay;
-		sum_az += az;
-
-		sum_gx += gx;
-		sum_gy += gy;
-		sum_gz += gz;
-
-		delay(4);
-	}
-
-	off_ax = sum_ax / N_CALIBRATION;
-	off_ay = sum_ay / N_CALIBRATION;
-	off_az = sum_az / N_CALIBRATION;
-
-	off_gx = sum_gx / N_CALIBRATION;
-	off_gy = sum_gy / N_CALIBRATION;
-	off_gz = sum_gz / N_CALIBRATION;	
-}
 
 /* ----- Flight controller ----- */
 
@@ -302,26 +280,20 @@ void setup()
 		Serial.println(F("  Connection to HMC5883L failed !"));
 		while(true);
 	}
-
-	compass.setMode(HMC5883L_MODE_CONTINUOUS);
-	compass.setSampleAveraging(HMC5883L_AVERAGING_8);
 	
   	// Configure
+	compass.setGain(HMC5883L_GAIN_1090);
+	compass.setMode(HMC5883L_MODE_CONTINUOUS);
+	compass.setDataRate(HMC5883L_RATE_30);
+	compass.setSampleAveraging(HMC5883L_AVERAGING_8);
+
 	off_decl = (off_decl_deg + (off_decl_min / 60.0)) * (M_PI / 180.0); 
   	
-/*  	compass.setRange(HMC5883L_RANGE_1_3GA);
-	compass.setMeasurementMode(HMC5883L_CONTINOUS);
-	compass.setDataRate(HMC5883L_DATARATE_30HZ);
-  	compass.setSamples(HMC5883L_SAMPLES_8);
- 	
- 	compass.setOffset(off_mag2, off_mag2); 
-*/
-
 	// Initialize barometer
 	Serial.println("> Initializing barometer");
 	barometer.initialize();
 	
-	// Check connection w/ compass
+	// Check connection w/ barometer
 	if (!barometer.testConnection()) {
 		Serial.println(F("  Connection to BMP180 failed !"));
 		while(true);
@@ -337,29 +309,10 @@ void setup()
 		while(true);
 	}
 
-	//0 = +/- 250 degrees/sec | 1 = +/- 500 degrees/sec | 2 = +/- 1000 degrees/sec | 3 =  +/- 2000 degrees/sec
-	mpu.setFullScaleGyroRange(MPU6050_GYRO_FS_250); 
-	//0 = +/- 2g | 1 = +/- 4g | 2 = +/- 8g | 3 =  +/- 16g
-  	mpu.setFullScaleAccelRange(MPU6050_ACCEL_FS_2);   
-/*
-	Serial.print("  Calibration ");
-	Serial.print("    Current offsets: ");
-	Serial.print("Acc(");
-	Serial.print(mpu.getXAccelOffset());
-	Serial.print(",");
-	Serial.print(mpu.getYAccelOffset());
-	Serial.print(",");
-	Serial.print(mpu.getZAccelOffset());
-	Serial.print(") Gyr(");
-	Serial.print(mpu.getXGyroOffset());
-	Serial.print(",");
-	Serial.print(mpu.getYGyroOffset());
-	Serial.print(",");
-	Serial.print(mpu.getZGyroOffset());
-	Serial.println(")");
-	
-	calibrate();
-*/
+        // Configure
+	mpu.setFullScaleGyroRange(MPU6050_GYRO_FS_250); // +/- 250 degrees/sec 
+  	mpu.setFullScaleAccelRange(MPU6050_ACCEL_FS_2); // +/- 2g
+
 	mpu.setXAccelOffset(off_ax);
 	mpu.setYAccelOffset(off_ay);
 	mpu.setZAccelOffset(off_az);
@@ -367,23 +320,8 @@ void setup()
 	mpu.setXGyroOffset(off_gx);
 	mpu.setYGyroOffset(off_gy);
 	mpu.setZGyroOffset(off_gz);
-/*	
-	Serial.print("    New offsets: ");
-	Serial.print("Acc(");
-	Serial.print(mpu.getXAccelOffset());
-	Serial.print(",");
-	Serial.print(mpu.getYAccelOffset());
-	Serial.print(",");
-	Serial.print(mpu.getZAccelOffset());
-	Serial.print(") Gyr(");
-	Serial.print(mpu.getXGyroOffset());
-	Serial.print(",");
-	Serial.print(mpu.getYGyroOffset());
-	Serial.print(",");
-	Serial.print(mpu.getZGyroOffset());
-	Serial.println(")");
-*/		
-	Serial.println(F("Ready"));
+
+	Serial.println(F("Rock'n'roll"));
 
 	// Initialize loop timer
 	timer = millis();
@@ -442,6 +380,9 @@ void dump_attitude()
 /* ----- Main loop ----- */
 void loop()
 {	
+        // Pulse width for each motors, initialized at throttle speed
+        int16_t esc_fr, esc_fl, esc_br, esc_bl;
+
 	unsigned int base_pulse;
 	
 	unsigned long start = millis(),	dt = start - timer;
@@ -460,25 +401,25 @@ void loop()
 		base_pulse = ESC_PULSE_MIN_WIDTH;
 	}  
 
-	// Get throttle value, translated from [-1;1] -> [0;1]
+	// Translate throttle command from [-1;1] -> [0;1]
 	throttle = (1.0 + channels[CMD_THROTTLE_ID]) / 2; 
 	// Arm switch
 	armed = (channels[CMD_ARMED_ID] >= 0);
-		
+
+        // Change status from SAFE to STOP only if throttle is 0 and switch is NOT armed
 	if (status == FLIGHT_STATUS_SAFE) {
-		// Change status from SAFE to STOP only if throttle is 0 and switch is NOT armed
 		if (!armed && throttle < 0.03) {
 			status = FLIGHT_STATUS_STOP;
 		} else{
 			// Stay safe
-			//Serial.println("Throttle warning");
+			//Serial.println("Throttle lock safety");
 		} 
 		
 		base_pulse = ESC_PULSE_MIN_WIDTH;
 	}
-	
+
+        // Change status from STOP to ARMED only if throttle is 0 and switch IS armed
 	if (status == FLIGHT_STATUS_STOP) {
-		// Change status from STOP to ARMED only if throttle is 0 and switch IS armed
 		if (armed) {
 			if (throttle < 0.03) {
 				status = FLIGHT_STATUS_ARMED;
@@ -503,27 +444,16 @@ void loop()
 		}
 	}
 
-	// Pulse width for each motors, initialized at throttle speed
-	int16_t esc_fr, esc_fl, esc_br, esc_bl;
-	esc_fr = esc_fl = esc_br = esc_bl = base_pulse;
+        esc_fr = esc_fl = esc_br = esc_bl = base_pulse;
 
-	if (status == FLIGHT_STATUS_ARMED) {
-		Serial.print("pulse = ");
-		Serial.print(base_pulse);
-		Serial.println("ms");
-	} else {
-		Serial.print("status = ");
-		Serial.println(status);		
-	}
-	
 	//get_attitude(dt);
 	//dump_attitude();
-/*
+
 	m_FR.set_pulse(esc_fr);
 	m_FL.set_pulse(esc_fl);
 	m_BR.set_pulse(esc_br);
 	m_BL.set_pulse(esc_bl);
-*/
+
 /*
 	Serial.print("dt =");
 	Serial.print((float)(dt) / 1000, 3);
