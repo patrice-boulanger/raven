@@ -3,8 +3,8 @@
 #include "motor.h"
 Motor m_FR(ESC_PIN_FR);
 Motor m_FL(ESC_PIN_FL);
-Motor m_BR(ESC_PIN_BR);
-Motor m_BL(ESC_PIN_BL);
+Motor m_RR(ESC_PIN_RR);
+Motor m_RL(ESC_PIN_RL);
 
 #include "PID.h"
 PID pid_yaw;
@@ -248,8 +248,8 @@ void set_motor_speed_manual(float cmd_throttle, float cmd_yaw, float cmd_pitch, 
 	
 	m_FR.set_pulse(front_right_speed);
 	m_FL.set_pulse(front_left_speed);
-	m_BR.set_pulse(back_right_speed);
-	m_BL.set_pulse(back_left_speed);
+	m_RR.set_pulse(back_right_speed);
+	m_RL.set_pulse(back_left_speed);
 }
 
 /* -----  Setup ----- */
@@ -398,7 +398,7 @@ void loop()
         timer = start;
 
         // Pulse widths for each motor, base pulse is computed from throttle
-        int16_t esc_fr, esc_fl, esc_br, esc_bl, base_pulse;
+        int16_t pulse_fr, pulse_fl, pulse_rr, pulse_rl, base_pulse;
   
 	// Get user commands
 	if (!xsr.readCal(&channels[0], &failSafe, &lostFrames)) {
@@ -410,7 +410,7 @@ void loop()
 	if (failSafe) {
 	        Serial.println(F(" -!-!-!- OUT OF RANGE -!-!-!-"));				
 		status = FLIGHT_STATUS_SAFE;
-		base_pulse = 0;
+		base_pulse = ESC_PULSE_MIN_WIDTH;
 	}  
 
 	// Translate throttle command from [-1;1] -> [0;1]
@@ -427,7 +427,7 @@ void loop()
 			//Serial.println("Throttle lock safety");
 		} 
 		
-		base_pulse = 0;
+		base_pulse = ESC_PULSE_MIN_WIDTH;
 	}
 
         // Change status from STOP to ARMED only if throttle is 0 and arming switch is on
@@ -439,24 +439,24 @@ void loop()
 				Serial.println("Motors armed");
 			} else {
 				status = FLIGHT_STATUS_SAFE;
-				base_pulse = 0;
+				base_pulse = ESC_PULSE_MIN_WIDTH;
 			}
 		} else {
-			base_pulse = 0;
+			base_pulse = ESC_PULSE_MIN_WIDTH;
 		}
 	}
 	
 	if (status == FLIGHT_STATUS_ARMED) {
 		if (!armed) {
 			status = FLIGHT_STATUS_STOP;
-			base_pulse = 0;
+			base_pulse = ESC_PULSE_MIN_WIDTH;
 			Serial.println("Motors stop");
 		} else {
 			base_pulse = ESC_PULSE_SPEED_0_WIDTH + throttle * (ESC_PULSE_SPEED_FULL_WIDTH - ESC_PULSE_SPEED_0_WIDTH);
 		}
 	}
-
-        esc_fr = esc_fl = esc_br = esc_bl = base_pulse;
+	
+	pulse_fr = pulse_fl = pulse_rr = pulse_rl = base_pulse;
 
         // Refresh drone attitude
         get_attitude(dt);
@@ -474,19 +474,22 @@ void loop()
                         roll_setpoint = channels[CMD_ROLL_ID] * roll_max_rate;
                 }
 /*
-                esc_fr += - roll - pitch - yaw;
-                esc_bl +=   roll + pitch - yaw;
-                esc_fl +=   roll - pitch + yaw;
-                esc_br += - roll + pitch + yaw;
+                // https://www.youtube.com/watch?v=2MRiVSyedS4
+                // To be checked for the signs ...
+                pulse_fr += - pitch_output + roll_output - yaw_output;
+                pulse_rr += + pitch_output + roll_output + yaw_output;
+                pulse_rl += + pitch_output - roll_output - yaw_output;
+                pulse_fl += - pitch_output - roll_output + yaw_output;
+          
 */                
         }
 
 	//dump_attitude();
 
-	m_FR.set_pulse(esc_fr);
-	m_FL.set_pulse(esc_fl);
-	m_BR.set_pulse(esc_br);
-	m_BL.set_pulse(esc_bl);
+	m_FR.set_pulse(pulse_fr);
+	m_FL.set_pulse(pulse_fl);
+	m_RR.set_pulse(pulse_rr);
+	m_RL.set_pulse(pulse_rl);
 
 /*
 	Serial.print("dt =");

@@ -29,8 +29,8 @@ const uint8_t CMD_CAMERA_ID = 6;
  * */
 const uint8_t ESC_PIN_FR = 20;  // CCW
 const uint8_t ESC_PIN_FL = 21;  // CW
-const uint8_t ESC_PIN_BR = 22; // CW
-const uint8_t ESC_PIN_BL = 23; // CCW
+const uint8_t ESC_PIN_RR = 22; // CW
+const uint8_t ESC_PIN_RL = 23; // CCW
 
 /* 
  * Pulses width in microseconds for ESC
