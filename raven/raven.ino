@@ -7,10 +7,9 @@ Motor m_BR(ESC_PIN_BR);
 Motor m_BL(ESC_PIN_BL);
 
 #include "PID.h"
-PID pid_FR;
-PID pid_FL;
-PID pid_BR;
-PID pid_BL;
+PID pid_yaw;
+PID pid_roll;
+PID pid_pitch;
 
 /*
  * Use jrowberg I2Cdev library for MPU6050, HMC5883L & BMP085/180
