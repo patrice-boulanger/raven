@@ -80,7 +80,16 @@ attitude_t attitude;
 // Flight controller status
 int status;
 
+// Flight mode
+int mode;
+
+// Throttle rate from user
 float throttle = 0;
+// Max. rates for acro mode (rads.s-1)
+float yaw_max_rate, pitch_max_rate, roll_max_rate;
+// Max. angles for self-level mode (rads)
+float pitch_max_angle, roll_max_angle;
+
 // Motor arming switch
 bool armed = false;
 // Buzzer switch
@@ -321,6 +330,16 @@ void setup()
 	mpu.setYGyroOffset(off_gy);
 	mpu.setZGyroOffset(off_gz);
 
+        // Default values
+        yaw_max_rate = (30 * DEG2RAD);
+        pitch_max_rate = (15 * DEG2RAD);
+        roll_max_rate = (15 * DEG2RAD);
+        
+        pitch_max_angle = (15 * DEG2RAD);
+        roll_max_angle = (15 * DEG2RAD);
+
+        mode = FLIGHT_MODE_LEVELED;
+
 	Serial.println(F("Rock'n'roll"));
 
 	// Initialize loop timer
@@ -380,23 +399,21 @@ void dump_attitude()
 /* ----- Main loop ----- */
 void loop()
 {	
-        // Pulse width for each motors, initialized at throttle speed
-        int16_t esc_fr, esc_fl, esc_br, esc_bl;
+        unsigned long start = millis(), dt = start - timer;
+        timer = start;
 
-	unsigned int base_pulse;
-	
-	unsigned long start = millis(),	dt = start - timer;
-	timer = start;
-	
+        // Pulse widths for each motor, base pulse is computed from throttle
+        int16_t esc_fr, esc_fl, esc_br, esc_bl, base_pulse;
+  
 	// Get user commands
 	if (!xsr.readCal(&channels[0], &failSafe, &lostFrames)) {
 		// Not connected or short packet read
 		return;
 	}
 
+        // Communication lost or out of range, stop everything :-/
 	if (failSafe) {
-		// Out of range, stop everything :-/
-		Serial.println(F(" -!-!-!- OUT OF RANGE -!-!-!-"));				
+	        Serial.println(F(" -!-!-!- OUT OF RANGE -!-!-!-"));				
 		status = FLIGHT_STATUS_SAFE;
 		base_pulse = ESC_PULSE_MIN_WIDTH;
 	}  
@@ -406,7 +423,7 @@ void loop()
 	// Arm switch
 	armed = (channels[CMD_ARMED_ID] >= 0);
 
-        // Change status from SAFE to STOP only if throttle is 0 and switch is NOT armed
+        // Change status from SAFE to STOP only if throttle is 0 and arming switch is off
 	if (status == FLIGHT_STATUS_SAFE) {
 		if (!armed && throttle < 0.03) {
 			status = FLIGHT_STATUS_STOP;
@@ -418,7 +435,7 @@ void loop()
 		base_pulse = ESC_PULSE_MIN_WIDTH;
 	}
 
-        // Change status from STOP to ARMED only if throttle is 0 and switch IS armed
+        // Change status from STOP to ARMED only if throttle is 0 and arming switch is on
 	if (status == FLIGHT_STATUS_STOP) {
 		if (armed) {
 			if (throttle < 0.03) {
@@ -446,7 +463,25 @@ void loop()
 
         esc_fr = esc_fl = esc_br = esc_bl = base_pulse;
 
-	//get_attitude(dt);
+        // Refresh drone attitude
+        get_attitude(dt);
+
+        if (status == FLIGHT_STATUS_ARMED) {
+                float yaw_setpoint, pitch_setpoint, roll_setpoint;
+
+                yaw_setpoint = channels[CMD_YAW_ID] * yaw_max_rate;
+
+                if (mode == FLIGHT_MODE_LEVELED) {
+                        pitch_setpoint = channels[CMD_PITCH_ID] * pitch_max_angle;
+                        roll_setpoint = channels[CMD_ROLL_ID] * roll_max_angle;
+                } else if (mode == FLIGHT_MODE_ACRO) {
+                        pitch_setpoint = channels[CMD_PITCH_ID] * pitch_max_rate;
+                        roll_setpoint = channels[CMD_ROLL_ID] * roll_max_rate;
+                }
+
+                
+        }
+
 	//dump_attitude();
 
 	m_FR.set_pulse(esc_fr);

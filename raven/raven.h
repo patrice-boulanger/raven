@@ -59,4 +59,9 @@ const uint8_t FLIGHT_STATUS_ALARM = 2;
 // Motors running, ready to fly
 const uint8_t FLIGHT_STATUS_ARMED = 3;
 
+/*
+ * Flight modes
+ */
+const uint8_t FLIGHT_MODE_LEVELED = 0;
+const uint8_t FLIGHT_MODE_ACRO = 1;
 #endif // raven_h
