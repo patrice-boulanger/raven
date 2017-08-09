@@ -45,7 +45,6 @@ void led_update()
 		return;
 		
 	char c = sequence[seq_pos];
-	Serial.println(c);
 	
 	// Increase the position, restart from the beginning if needed
 	seq_pos = (seq_pos + 1) % seq_len;
