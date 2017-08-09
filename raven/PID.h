@@ -10,17 +10,17 @@ public:
         ~PID();
 
         // Returns Kp
-        float getKp();
+        float get_kp();
         // Returns Ki
-        float getKi();
+        float get_ki();
         // Returns Kd
-        float getKd();
+        float get_kd();
 
         // Set Kp/Ki/Kd
-        void setKpid(float kp, float ki, float kd);
+        void set_kpid(float kp, float ki, float kd);
 
         // Set bounds 
-        void setBounds(float minv, float maxv);
+        void set_minmax(float minv, float maxv);
 
         // Compute the correction factor based on input (real) & target (expected) values
         float compute(float real, float expected);

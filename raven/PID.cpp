@@ -9,22 +9,22 @@ PID::PID()
 
 PID::~PID() {}
 
-float PID::getKp()
+float PID::get_kp()
 {
         return Kp;
 }
 
-float PID::getKi()
+float PID::get_ki()
 {      
         return Ki;
 }
 
-float PID::getKd()
+float PID::get_kd()
 {
         return Kd;
 }
 
-void PID::setKpid(float kp, float ki, float kd)
+void PID::set_kpid(float kp, float ki, float kd)
 {
         if (kp < 0 || ki < 0 || kd < 0)
                 return;
@@ -34,7 +34,7 @@ void PID::setKpid(float kp, float ki, float kd)
         Kd = kd;
 }
 
-void PID::setBounds(float minv, float maxv)
+void PID::set_minmax(float minv, float maxv)
 {
         minval = minv;
         maxval = maxv;
