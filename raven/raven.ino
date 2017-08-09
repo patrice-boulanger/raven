@@ -135,8 +135,8 @@ void get_attitude(unsigned long ms)
 	// Angular speeds (rads.s-1)
 	// The sensor returns deg.s-1
         attitude.x_rate = (gx * DEG2RAD) / 131.0; 
-        attitude.y_rate = (gy * DEG2RAD)/ 131.0;
-        attitude.z_rate = (gz * DEG2RAD)/ 131.0;
+        attitude.y_rate = (gy * DEG2RAD) / 131.0;
+        attitude.z_rate = (gz * DEG2RAD) / 131.0;
 
         // Orientation of the accelerometer relative to the earth
         float x_angle = atan2(ay, az);
@@ -302,7 +302,7 @@ void setup()
 	compass.setDataRate(HMC5883L_RATE_30);
 	compass.setSampleAveraging(HMC5883L_AVERAGING_8);
 
-	off_decl = (off_decl_deg + (off_decl_min / 60.0)) * (M_PI / 180.0); 
+	off_decl = (off_decl_deg + (off_decl_min / 60.0)) * DEG2RAD;
   	
 	// Initialize barometer
 	Serial.println("> Initializing barometer");
