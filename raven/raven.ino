@@ -8,7 +8,7 @@
  * https://github.com/jrowberg/i2cdevlib
  */ 
 #include "I2Cdev.h"
-#include "Wire.h"
+#include <Wire.h>
 #include "MPU6050.h"
 //#include "MPU6050_6Axis_MotionApps20.h"
 #include "HMC5883L.h"
@@ -54,6 +54,7 @@ float off_decl = 0.0; // declinaison angle
 BMP085 barometer;
 
 /* --- Flight Controller Data --- */
+// Drone attitude
 typedef struct {
 	float x_acc, y_acc, z_acc;	// acceleration (m.s-2)
 	float x_rate, y_rate, z_rate;	// angular speeds (rads.s-1)
@@ -74,7 +75,6 @@ typedef struct {
 
 } attitude_t;
 
-// Drone attitude
 attitude_t attitude;
 
 // Flight controller status
@@ -101,13 +101,18 @@ PID pid_yaw;
 PID pid_roll;
 PID pid_pitch;
 
-// Pulse widths for each motor, base pulse is computed from throttle
-int16_t pulse_fr, pulse_fl, pulse_rr, pulse_rl, base_pulse;
+float yaw_setpoint, pitch_setpoint, roll_setpoint;
+float yaw_output, pitch_output, roll_output;
 
-Motor m_FR(ESC_PIN_FR);
-Motor m_FL(ESC_PIN_FL);
-Motor m_RR(ESC_PIN_RR);
-Motor m_RL(ESC_PIN_RL);
+Motor esc_FR(ESC_PIN_FR); // Front-Right CCW
+Motor esc_FL(ESC_PIN_FL); // Front-Left  CW
+Motor esc_RR(ESC_PIN_RR); // Rear-Right  CW
+Motor esc_RL(ESC_PIN_RL); // Rear-Left   CCW
+
+// Base pulse computed from throttle
+int16_t base_pulse;
+// Pulse width adjustement for each motor, computed from PID
+int16_t pulse_fr, pulse_fl, pulse_rr, pulse_rl; 
 
 // Loop timer
 unsigned long timer = 0;
@@ -248,10 +253,10 @@ void set_motor_speed_manual(float cmd_throttle, float cmd_yaw, float cmd_pitch, 
 	back_right_speed   += 0.15 * (- roll + pitch + yaw) / 3;
 */
 	
-	m_FR.set_pulse(front_right_speed);
-	m_FL.set_pulse(front_left_speed);
-	m_RR.set_pulse(back_right_speed);
-	m_RL.set_pulse(back_left_speed);
+	esc_FR.set_pulse(front_right_speed);
+	esc_FL.set_pulse(front_left_speed);
+	esc_RR.set_pulse(back_right_speed);
+	esc_RL.set_pulse(back_left_speed);
 }
 
 /* -----  Setup ----- */
@@ -339,7 +344,18 @@ void setup()
 	mpu.setYGyroOffset(off_gy);
 	mpu.setZGyroOffset(off_gz);
 
-        // Default values
+        // Configure flight controller
+
+        // !! TBC !!
+        pid_yaw.set_kpid(2, 0.0, 0.0);
+        pid_yaw.set_minmax(-200, 200);
+        
+        pid_pitch.set_kpid(2, 0.0, 0.0);
+        pid_pitch.set_minmax(-200, 200);
+        
+        pid_roll.set_kpid(2, 0.0, 0.0);
+        pid_roll.set_minmax(-200, 200);
+
         yaw_max_rate = (30 * DEG2RAD);
         pitch_max_rate = (15 * DEG2RAD);
         roll_max_rate = (15 * DEG2RAD);
@@ -422,7 +438,7 @@ void loop()
 	// Get user commands
 	if (xsr.readCal(&channels[0], &failSafe, &lostFrames)) {
 		// Translate throttle command from [-1;1] -> [0;1]
-		throttle = (1.0 + channels[CMD_THROTTLE_ID]) / 2; 
+		throttle = (1.0 + channels[CHNL_THROTTLE]) / 2; 
 		base_pulse = ESC_PULSE_SPEED_0_WIDTH + throttle * (ESC_PULSE_SPEED_FULL_WIDTH - ESC_PULSE_SPEED_0_WIDTH);
 		
 /*
@@ -434,7 +450,7 @@ void loop()
 	}  
 */
 	
-/*	armed = (channels[CMD_ARMED_ID] > 0);
+/*	armed = (channels[CHNL_ARMED] > 0);
 	if (armed) 
 		base_pulse = ESC_PULSE_SPEED_0_WIDTH;
 	else
@@ -481,39 +497,45 @@ void loop()
 		}
 	}
 */	
-		pulse_fr = pulse_fl = pulse_rr = pulse_rl = base_pulse;
-	
 	        // Refresh drone attitude
-	        //get_attitude(dt);
+	        get_attitude(dt);
 	
 	        if (status == FLIGHT_STATUS_ARMED) {
-	                float yaw_setpoint, pitch_setpoint, roll_setpoint;
-	
-	                yaw_setpoint = channels[CMD_YAW_ID] * yaw_max_rate;
-	
+                        // Initialize all pulses w/ base pulse
+                        pulse_fr = pulse_fl = pulse_rr = pulse_rl = base_pulse;
+
+	                yaw_setpoint = channels[CHNL_YAW] * yaw_max_rate;
+	                yaw_output = pid_yaw.compute(attitude.rspeed, yaw_setpoint);
+
 	                if (mode == FLIGHT_MODE_LEVELED) {
-	                        pitch_setpoint = channels[CMD_PITCH_ID] * pitch_max_angle;
-	                        roll_setpoint = channels[CMD_ROLL_ID] * roll_max_angle;
+	                        pitch_setpoint = channels[CHNL_PITCH] * pitch_max_angle;
+	                        roll_setpoint = channels[CHNL_ROLL] * roll_max_angle;
+
+                                pitch_output = pid_pitch.compute(attitude.pitch, pitch_setpoint);
+                                roll_output = pid_roll.compute(attitude.roll, roll_setpoint);
+
 	                } else if (mode == FLIGHT_MODE_ACRO) {
-	                        pitch_setpoint = channels[CMD_PITCH_ID] * pitch_max_rate;
-	                        roll_setpoint = channels[CMD_ROLL_ID] * roll_max_rate;
+	                        pitch_setpoint = channels[CHNL_PITCH] * pitch_max_rate;
+	                        roll_setpoint = channels[CHNL_ROLL] * roll_max_rate;
+
+                                pitch_output = pid_pitch.compute(attitude.y_rate, pitch_setpoint);
+                                roll_output = pid_roll.compute(attitude.x_rate, roll_setpoint);
 	                }
-	/*
-	                // https://www.youtube.com/watch?v=2MRiVSyedS4
+        
+                        // https://www.youtube.com/watch?v=2MRiVSyedS4
 	                // To be checked for the signs ...
 	                pulse_fr += - pitch_output + roll_output - yaw_output;
 	                pulse_rr += + pitch_output + roll_output + yaw_output;
 	                pulse_rl += + pitch_output - roll_output - yaw_output;
 	                pulse_fl += - pitch_output - roll_output + yaw_output;
-	          
-	*/                
+
+                        esc_FR.set_pulse(pulse_fr);
+                        esc_FL.set_pulse(pulse_fl);
+                        esc_RR.set_pulse(pulse_rr);
+                        esc_RL.set_pulse(pulse_rl);
 	        }
 	
 		//dump_attitude();
-		m_FR.set_pulse(pulse_fr);
-		m_FL.set_pulse(pulse_fl);
-		m_RR.set_pulse(pulse_rr);
-		m_RL.set_pulse(pulse_rl);
 	}
 	
 /*
