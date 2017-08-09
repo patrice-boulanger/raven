@@ -5,12 +5,27 @@
 char sequence[SEQ_SZ + 1];
 int seq_len = 0, seq_pos = -1;
 
-void set_leds(const char *seq)
+void led_on(uint8_t pin)
+{
+	analogWrite(LED_GREEN_PIN, 0);
+}
+
+void led_off(uint8_t pin)
+{
+	analogWrite(LED_GREEN_PIN, 255);
+}
+
+void led_clear()
+{
+	led_off(LED_GREEN_PIN);
+	led_off(LED_RED_PIN);
+	led_off(LED_WHITE_PIN);
+}
+
+void led_sequence(const char *seq)
 {
 	// Switch off all LEDs
-	analogWrite(LED_GREEN_PIN, 0);
-	analogWrite(LED_RED_PIN, 0);
-	analogWrite(LED_WHITE_PIN, 0);
+	led_clear();
 	
 	if (seq == 0) 
 		seq_pos = -1;
@@ -21,7 +36,7 @@ void set_leds(const char *seq)
 	}
 }
 
-void update_leds()
+void led_update()
 {
 	if (seq_pos == -1)
 		return;
@@ -33,22 +48,22 @@ void update_leds()
 	
 	switch(c) {
 	case 'g':
-		analogWrite(LED_GREEN_PIN, 0);
+		led_off(LED_GREEN_PIN);
 		break;
 	case 'G':
-		analogWrite(LED_GREEN_PIN, 255);
+		led_on(LED_GREEN_PIN);
 		break;
 	case 'r':
-		analogWrite(LED_RED_PIN, 0);
+		led_off(LED_RED_PIN);
 		break;
 	case 'R':
-		analogWrite(LED_RED_PIN, 255);
+		led_on(LED_RED_PIN);
 		break;
 	case 'w':
-		analogWrite(LED_WHITE_PIN, 0);
+		led_off(LED_WHITE_PIN);
 		break;
 	case 'W':
-		analogWrite(LED_WHITE_PIN, 255);
+		led_on(LED_WHITE_PIN);
 		break;
 	}
 }
