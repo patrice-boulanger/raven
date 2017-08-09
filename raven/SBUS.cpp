@@ -65,20 +65,17 @@ bool SBUS::readCal(float* calChannels, uint8_t* failsafe, uint16_t* lostFrames){
 
 	// read the SBUS data
 	if(read(&channels[0],failsafe,lostFrames)){
-
 		// linear calibration
-    	for(uint8_t i = 0; i < 16; i++){
-      		calChannels[i] = channels[i] * _sbusScale + _sbusBias;
-    	}
+    		for(uint8_t i = 0; i < 16; i++){
+      			calChannels[i] = channels[i] * _sbusScale + _sbusBias;
+    		}
 
-    	// return true on receiving a full packet
-    	return true;
+    		// return true on receiving a full packet
+    		return true;
+  	} else {
+    		// return false if a full packet is not received
+    		return false;
   	}
-  	else{
-
-    	// return false if a full packet is not received
-    	return false;
-  }
 }
 
 /* read the SBUS data */
