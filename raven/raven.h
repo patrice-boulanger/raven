@@ -2,10 +2,10 @@
  * raven.h - main raven include file
  */
 
-#ifndef raven_h
-#define raven_h
+#ifndef _RAVEN_H
+#define _RAVEN_H
 
-#include <Wire.h>
+#include "Arduino.h"
 
 #if !defined(TEENSYDUINO)
 #error This code runs on Teensy board >= 3.0
@@ -72,4 +72,5 @@ const uint8_t FLIGHT_STATUS_ARMED = 3;
  */
 const uint8_t FLIGHT_MODE_LEVELED = 0;
 const uint8_t FLIGHT_MODE_ACRO = 1;
-#endif // raven_h
+
+#endif // _RAVEN_H
