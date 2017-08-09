@@ -1,58 +1,59 @@
 #include "raven.h"
+#include "buzzer.h"
 #include "led.h"
-
 #include "motor.h"
-Motor m_FR(ESC_PIN_FR);
-Motor m_FL(ESC_PIN_FL);
-Motor m_RR(ESC_PIN_RR);
-Motor m_RL(ESC_PIN_RL);
-
-// Pulse widths for each motor, base pulse is computed from throttle
-int16_t pulse_fr, pulse_fl, pulse_rr, pulse_rl, base_pulse;
- 
 #include "PID.h"
-PID pid_yaw;
-PID pid_roll;
-PID pid_pitch;
-
 /*
  * Use jrowberg I2Cdev library for MPU6050, HMC5883L & BMP085/180
  * https://github.com/jrowberg/i2cdevlib
  */ 
 #include "I2Cdev.h"
-// Arduino Wire library is required if I2Cdev I2CDEV_ARDUINO_WIRE implementation is used in I2Cdev.h
-#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
-    #include "Wire.h"
-#endif
-
-/* --- MPU6050: accelerometer/gyroscope --- */
+#include "Wire.h"
 #include "MPU6050.h"
 //#include "MPU6050_6Axis_MotionApps20.h"
+#include "HMC5883L.h"
+#include "BMP085.h"
+/* 
+ * Use bolderflight SBUS library for Teensy 
+ * https://github.com/bolderflight/SBUS.git
+ */
+#include "SBUS.h"
+
+/* ----- Constants -----  */
+
+// Complementary filter coefficient
+#define ALPHA                   0.96
+
+// Number of samples for altitude averaging
+#define ALT_SAMPLES             20
+
+// Degrees/radians conversion
+const float RAD2DEG = 180.0/M_PI;
+const float DEG2RAD = M_PI/180.0;
+
+/* ----- Variables ----- */
+
+// FRSky XSR receiver in SBUS mode on Serial3
+SBUS xsr(Serial3);
+
+// SBUS channels & data
+float channels[16];
+uint8_t failSafe;
+uint16_t lostFrames = 0;
 
 MPU6050 mpu;
 // Calibration offsets: computed w/ I2Cdev IMU_Zero sketch
 int off_ax = -989, off_ay = -492, off_az = 1557;
 int off_gx = 36, off_gy = 1, off_gz = 26;
 
-/* --- HMC5883L: magnetometer --- */
-#include "HMC5883L.h"
 HMC5883L compass;
-
-// Calibration offsets
-float off_decl_deg = 0, off_decl_min = 57.96; // declinaison angle degrees/minutes for Paris
+// Magnetic declinaison
+float off_decl_deg = 0, off_decl_min = 57.96; // Paris
 float off_decl = 0.0; // declinaison angle
 
-/* --- BMP180: barometer --- */
-#include "BMP085.h"
 BMP085 barometer;
 
 /* --- Flight Controller Data --- */
-
-// Complementary filter coefficient
-#define ALPHA                   0.96
-// Number of samples for altitude averaging
-#define ALT_SAMPLES		20
-
 typedef struct {
 	float x_acc, y_acc, z_acc;	// acceleration (m.s-2)
 	float x_rate, y_rate, z_rate;	// angular speeds (rads.s-1)
@@ -84,33 +85,29 @@ int mode;
 
 // Throttle rate from user
 float throttle = 0;
-// Max. rates for acro mode (rads.s-1)
-float yaw_max_rate, pitch_max_rate, roll_max_rate;
-// Max. angles for self-level mode (rads)
-float pitch_max_angle, roll_max_angle;
-
 // Motor arming switch
-//bool armed = false;
+bool armed = false;
 // Buzzer switch
 bool buzzer = false;
 // Camera declinaison angle
 float camera_angle = 0;
 
-// Degrees/radians conversion
-const float RAD2DEG = 180.0/M_PI;
-const float DEG2RAD = M_PI/180.0;
+// Max. rates for acro mode (rads.s-1)
+float yaw_max_rate, pitch_max_rate, roll_max_rate;
+// Max. angles for self-level mode (rads)
+float pitch_max_angle, roll_max_angle;
 
-/* 
- * Use bolderflight SBUS library for Teensy 
- * https://github.com/bolderflight/SBUS.git
- */
-#include "SBUS.h"
-// FRSky XSR receiver in SBUS mode on Serial3
-SBUS xsr(Serial3);
-// SBUS channels & data
-float channels[16];
-uint8_t failSafe;
-uint16_t lostFrames = 0;
+PID pid_yaw;
+PID pid_roll;
+PID pid_pitch;
+
+// Pulse widths for each motor, base pulse is computed from throttle
+int16_t pulse_fr, pulse_fl, pulse_rr, pulse_rl, base_pulse;
+
+Motor m_FR(ESC_PIN_FR);
+Motor m_FL(ESC_PIN_FL);
+Motor m_RR(ESC_PIN_RR);
+Motor m_RL(ESC_PIN_RL);
 
 // Loop timer
 unsigned long timer = 0;
@@ -178,7 +175,8 @@ void get_attitude(unsigned long ms)
 	
 		// Correct angle if necessary
 		if (attitude.heading < 0) 
-			attitude.heading += 2 * PI; 
+			attitude.heading += 2 * PI;
+                      
 	  	if (attitude.heading > 2 * PI) 
 	  		attitude.heading -= 2 * PI;  
 	
@@ -266,14 +264,18 @@ void setup()
 	Serial.print(RAVEN_VERSION);
 	Serial.println(F(" starting"));
 
+        // Buzzer
+        pinMode(BUZZER_PIN, OUTPUT);
+        buzzer_play(BUZZER_START);
+        
 	// LEDs
 	pinMode(LED_GREEN_PIN, OUTPUT);
 	pinMode(LED_RED_PIN, OUTPUT);
 	pinMode(LED_WHITE_PIN, OUTPUT);
 
-	analogWrite(LED_GREEN_PIN, 255);
-	analogWrite(LED_RED_PIN, 255);
-
+	led_on(LED_GREEN_PIN);
+	led_on(LED_RED_PIN);
+	
 	Serial.println(F("> Initializing SBUS RX"));
 	xsr.begin();
 	
@@ -347,33 +349,22 @@ void setup()
 
         mode = FLIGHT_MODE_LEVELED;
 
-	// Initialize loop timer
-	timer = millis();
-
-	Serial.print("Waiting for TX ... ");
-	while(true) {
-		if (!xsr.readCal(&channels[0], &failSafe, &lostFrames) || failSafe)
-			delay(100);
-		else
-			break;
+	Serial.print(F("Waiting for TX ... "));
+        int cnt = 10;
+        while(cnt != 0) {
+		if (xsr.readCal(&channels[0], &failSafe, &lostFrames) && !failSafe)
+                        cnt --;
+     
+		delay(100);
 	}
 
 	Serial.println("OK");
-	Serial.println(F("Rock'n'roll"));
 
-	analogWrite(LED_GREEN_PIN, 0);
-	analogWrite(LED_RED_PIN, 0);
-	
-	tone(BUZZER_PIN, 440, 500);
-	delay(600);		
-	tone(BUZZER_PIN, 440, 100);
-	delay(200);	
-	tone(BUZZER_PIN, 440, 100);	
+	buzzer_play(BUZZER_READY);
+	led_sequence("G__________gR__________rW__________w");
 
-	set_leds("G__________gR__________rW__________w");
-	//set_leds("WG__________w__________gWR__________w__________r");
-	
-	delay(200);
+        timer = millis();
+	delay(20);
 }
 
 // Dump all SBUS channels to serial
@@ -429,8 +420,7 @@ void loop()
         timer = start;
 
 	// Get user commands
-	if (!xsr.readCal(&channels[0], &failSafe, &lostFrames)) {
-		
+	if (xsr.readCal(&channels[0], &failSafe, &lostFrames)) {
 		// Translate throttle command from [-1;1] -> [0;1]
 		throttle = (1.0 + channels[CMD_THROTTLE_ID]) / 2; 
 		base_pulse = ESC_PULSE_SPEED_0_WIDTH + throttle * (ESC_PULSE_SPEED_FULL_WIDTH - ESC_PULSE_SPEED_0_WIDTH);
@@ -531,5 +521,5 @@ void loop()
 	Serial.print((float)(dt) / 1000, 3);
 	Serial.println("ms");
 */
-	update_leds();
+	led_update();
 }
