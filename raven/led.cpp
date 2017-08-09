@@ -7,12 +7,12 @@ int seq_len = 0, seq_pos = -1;
 
 void led_on(uint8_t pin)
 {
-	analogWrite(LED_GREEN_PIN, 0);
+	analogWrite(pin, 0);
 }
 
 void led_off(uint8_t pin)
 {
-	analogWrite(LED_GREEN_PIN, 255);
+	analogWrite(pin, 255);
 }
 
 void led_clear()
@@ -20,6 +20,9 @@ void led_clear()
 	led_off(LED_GREEN_PIN);
 	led_off(LED_RED_PIN);
 	led_off(LED_WHITE_PIN);
+
+	seq_pos = -1;
+	seq_len = 0;
 }
 
 void led_sequence(const char *seq)
@@ -38,13 +41,14 @@ void led_sequence(const char *seq)
 
 void led_update()
 {
-	if (seq_pos == -1)
+	if (seq_pos == -1) 
 		return;
-	
+		
 	char c = sequence[seq_pos];
+	Serial.println(c);
 	
 	// Increase the position, restart from the beginning if needed
-	seq_pos = (seq_pos ++) % seq_len;
+	seq_pos = (seq_pos + 1) % seq_len;
 	
 	switch(c) {
 	case 'g':
