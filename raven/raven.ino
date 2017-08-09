@@ -1,4 +1,5 @@
 #include "raven.h"
+#include "led.h"
 
 #include "motor.h"
 Motor m_FR(ESC_PIN_FR);
@@ -369,6 +370,9 @@ void setup()
 	delay(200);	
 	tone(BUZZER_PIN, 440, 100);	
 
+	set_leds("G__________gR__________rW__________w");
+	//set_leds("WG__________w__________gWR__________w__________r");
+	
 	delay(200);
 }
 
@@ -527,4 +531,5 @@ void loop()
 	Serial.print((float)(dt) / 1000, 3);
 	Serial.println("ms");
 */
+	update_leds();
 }
