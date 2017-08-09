@@ -31,6 +31,10 @@
 const float RAD2DEG = 180.0/M_PI;
 const float DEG2RAD = M_PI/180.0;
 
+// Speed interval for throttle
+// Divide by 2 to translate throttle from [-1;+1] to [0;1] 
+const float speed_scale = 0.5 * (ESC_PULSE_SPEED_FULL_WIDTH - ESC_PULSE_SPEED_0_WIDTH);
+
 /* ----- Variables ----- */
 
 // FRSky XSR receiver in SBUS mode on Serial3
@@ -83,8 +87,6 @@ int status;
 // Flight mode
 int mode;
 
-// Throttle rate from user
-float throttle = 0;
 // Motor arming switch
 bool armed = false;
 // Buzzer switch
@@ -222,43 +224,6 @@ void get_attitude(unsigned long ms)
     	attitude.vspeed = (attitude.altitude - attitude.altitude_p) / dt;
 }	
 
-/* ----- Flight controller ----- */
-
-/*
- * Full manual control of the drone, based only on commands received from user.
- * Don't apply any compensation, free flight style !
- *
- * To compute each motor speed, use the following rules:
- * 
- *  pitch < 0 -> nose raises up -> front motors speed increases & back motors speed decreases
- *  pitch > 0 -> nose dips -> front motors speed decreases & back motors speed increases
- *   roll < 0 -> rolls left -> left motors speed decreases & right motors speed increases
- *   roll > 0 -> rolls right -> left motors speed increases & right motors speed decreases
- *    yaw < 0 -> rotate left -> front-right/back-left motors speed increases & front-left/back-right motors speed decreases
- *    yaw > 0 -> rotate right -> front-right/back-left motors speed decreases & front-left/back-right motors speed increases
- */
-void set_motor_speed_manual(float cmd_throttle, float cmd_yaw, float cmd_pitch, float cmd_roll)
-{
-	// Keep some room for motors adjustement
-	if (cmd_throttle > 0.9)
-		cmd_throttle = 0.9;
-
-	int16_t front_right_speed, front_left_speed, back_right_speed, back_left_speed;
-	front_right_speed = front_left_speed = back_right_speed = back_left_speed = ESC_PULSE_MIN_WIDTH + cmd_throttle * (ESC_PULSE_MAX_WIDTH - ESC_PULSE_MIN_WIDTH);
-
-/*	
-	front_right_speed  += 0.15 * (- roll - pitch - yaw) / 3;
-	back_left_speed    += 0.15 * (  roll + pitch - yaw) / 3;
-	front_left_speed   += 0.15 * (  roll - pitch + yaw) / 3;
-	back_right_speed   += 0.15 * (- roll + pitch + yaw) / 3;
-*/
-	
-	esc_FR.set_pulse(front_right_speed);
-	esc_FL.set_pulse(front_left_speed);
-	esc_RR.set_pulse(back_right_speed);
-	esc_RL.set_pulse(back_left_speed);
-}
-
 /* -----  Setup ----- */
 void setup()
 {
@@ -278,7 +243,7 @@ void setup()
 	pinMode(LED_RED_PIN, OUTPUT);
 	pinMode(LED_WHITE_PIN, OUTPUT);
 
-	led_on(LED_GREEN_PIN);
+	led_clear();
 	led_on(LED_RED_PIN);
 	
 	Serial.println(F("> Initializing SBUS RX"));
@@ -347,13 +312,13 @@ void setup()
         // Configure flight controller
 
         // !! TBC !!
-        pid_yaw.set_kpid(2, 0.0, 0.0);
+        pid_yaw.set_kpid(200, 0.0, 0.0);
         pid_yaw.set_minmax(-200, 200);
         
-        pid_pitch.set_kpid(2, 0.0, 0.0);
+        pid_pitch.set_kpid(200, 0.0, 0.0);
         pid_pitch.set_minmax(-200, 200);
         
-        pid_roll.set_kpid(2, 0.0, 0.0);
+        pid_roll.set_kpid(200, 0.0, 0.0);
         pid_roll.set_minmax(-200, 200);
 
         yaw_max_rate = (30 * DEG2RAD);
@@ -365,13 +330,17 @@ void setup()
 
         mode = FLIGHT_MODE_LEVELED;
 
+	led_sequence("rG__________gR__________");
+	
 	Serial.print(F("Waiting for TX ... "));
+	
         int cnt = 10;
         while(cnt != 0) {
 		if (xsr.readCal(&channels[0], &failSafe, &lostFrames) && !failSafe)
                         cnt --;
-     
-		delay(100);
+
+  		led_update();   
+		delay(10);
 	}
 
 	Serial.println("OK");
@@ -426,7 +395,9 @@ void dump_attitude()
 	Serial.print(", ");
 	Serial.print(attitude.temperature);
 	Serial.print(", ");
-	Serial.println(attitude.pressure);
+	Serial.print(attitude.pressure);
+
+	Serial.println();
 }
 
 /* ----- Main loop ----- */
@@ -436,19 +407,11 @@ void loop()
         timer = start;
 
 	// Get user commands
-	if (xsr.readCal(&channels[0], &failSafe, &lostFrames)) {
+	if (xsr.readCal(&channels[0], &failSafe, &lostFrames)  && !failSafe) {
 		// Translate throttle command from [-1;1] -> [0;1]
-		throttle = (1.0 + channels[CHNL_THROTTLE]) / 2; 
-		base_pulse = ESC_PULSE_SPEED_0_WIDTH + throttle * (ESC_PULSE_SPEED_FULL_WIDTH - ESC_PULSE_SPEED_0_WIDTH);
-		
-/*
-        // Communication lost or out of range, stop everything :-/
-	if (failSafe) {
-	        Serial.println(F(" -!-!-!- OUT OF RANGE -!-!-!-"));				
-		status = FLIGHT_STATUS_SAFE;
-		base_pulse = ESC_PULSE_MIN_WIDTH;
-	}  
-*/
+		//ESC_PULSE_SPEED_0_WIDTH + ((1.0 + throttle) / 2.0) * (ESC_PULSE_SPEED_FULL_WIDTH - ESC_PULSE_SPEED_0_WIDTH); 
+		base_pulse = ESC_PULSE_SPEED_0_WIDTH + (1.0 + channels[CHNL_THROTTLE]) * speed_scale; 
+	}
 	
 /*	armed = (channels[CHNL_ARMED] > 0);
 	if (armed) 
@@ -497,51 +460,66 @@ void loop()
 		}
 	}
 */	
-	        // Refresh drone attitude
-	        get_attitude(dt);
+	// Refresh drone attitude
+	get_attitude(dt);
+	//dump_attitude();
 	
-	        if (status == FLIGHT_STATUS_ARMED) {
-                        // Initialize all pulses w/ base pulse
-                        pulse_fr = pulse_fl = pulse_rr = pulse_rl = base_pulse;
+        // Initialize all pulses w/ base pulse
+        pulse_fr = pulse_fl = pulse_rr = pulse_rl = base_pulse;
 
-	                yaw_setpoint = channels[CHNL_YAW] * yaw_max_rate;
-	                yaw_output = pid_yaw.compute(attitude.rspeed, yaw_setpoint);
+	yaw_setpoint = channels[CHNL_YAW] * yaw_max_rate;
+	yaw_output = pid_yaw.compute(attitude.rspeed, yaw_setpoint);
 
-	                if (mode == FLIGHT_MODE_LEVELED) {
-	                        pitch_setpoint = channels[CHNL_PITCH] * pitch_max_angle;
-	                        roll_setpoint = channels[CHNL_ROLL] * roll_max_angle;
+	if (mode == FLIGHT_MODE_LEVELED) {
+		pitch_setpoint = channels[CHNL_PITCH] * pitch_max_angle;
+	        roll_setpoint = channels[CHNL_ROLL] * roll_max_angle;
 
-                                pitch_output = pid_pitch.compute(attitude.pitch, pitch_setpoint);
-                                roll_output = pid_roll.compute(attitude.roll, roll_setpoint);
+                pitch_output = pid_pitch.compute(attitude.pitch, pitch_setpoint);
+                roll_output = pid_roll.compute(attitude.roll, roll_setpoint);
 
-	                } else if (mode == FLIGHT_MODE_ACRO) {
-	                        pitch_setpoint = channels[CHNL_PITCH] * pitch_max_rate;
-	                        roll_setpoint = channels[CHNL_ROLL] * roll_max_rate;
+	} else if (mode == FLIGHT_MODE_ACRO) {
+                pitch_setpoint = channels[CHNL_PITCH] * pitch_max_rate;
+		roll_setpoint = channels[CHNL_ROLL] * roll_max_rate;
 
-                                pitch_output = pid_pitch.compute(attitude.y_rate, pitch_setpoint);
-                                roll_output = pid_roll.compute(attitude.x_rate, roll_setpoint);
-	                }
-        
-                        // https://www.youtube.com/watch?v=2MRiVSyedS4
-	                // To be checked for the signs ...
-	                pulse_fr += - pitch_output + roll_output - yaw_output;
-	                pulse_rr += + pitch_output + roll_output + yaw_output;
-	                pulse_rl += + pitch_output - roll_output - yaw_output;
-	                pulse_fl += - pitch_output - roll_output + yaw_output;
-
-                        esc_FR.set_pulse(pulse_fr);
-                        esc_FL.set_pulse(pulse_fl);
-                        esc_RR.set_pulse(pulse_rr);
-                        esc_RL.set_pulse(pulse_rl);
-	        }
-	
-		//dump_attitude();
+                pitch_output = pid_pitch.compute(attitude.y_rate, pitch_setpoint);
+		roll_output = pid_roll.compute(attitude.x_rate, roll_setpoint);
 	}
+
+	        
+	/* 
+	 *  To compute each motor speed, use the following rules:
+	 * 
+	 *  pitch < 0 -> nose raises up -> front motors speed increases & back motors speed decreases
+	 *  pitch > 0 -> nose dips -> front motors speed decreases & back motors speed increases
+	 *   roll < 0 -> rolls left -> left motors speed decreases & right motors speed increases
+	 *   roll > 0 -> rolls right -> left motors speed increases & right motors speed decreases
+	 *    yaw < 0 -> rotate left -> front-right/back-left motors speed increases & front-left/back-right motors speed decreases
+	 *    yaw > 0 -> rotate right -> front-right/back-left motors speed decreases & front-left/back-right motors speed increases
+	 */
+        // https://www.youtube.com/watch?v=2MRiVSyedS4
+	// To be checked for the signs ...
+	pulse_fr += - pitch_output + roll_output - yaw_output;
+	pulse_rr += + pitch_output + roll_output + yaw_output;
+	pulse_rl += + pitch_output - roll_output - yaw_output;
+	pulse_fl += - pitch_output - roll_output + yaw_output;
+
+	Serial.print(pulse_fr);
+	Serial.print(" ");
+	Serial.print(pulse_fl);
+	Serial.print(" ");
+	Serial.print(pulse_rl);
+	Serial.print(" ");
+	Serial.println(pulse_rr);
 	
 /*
-	Serial.print("dt =");
-	Serial.print((float)(dt) / 1000, 3);
-	Serial.println("ms");
-*/
+        esc_FR.set_pulse(pulse_fr);
+        esc_FL.set_pulse(pulse_fl);
+        esc_RR.set_pulse(pulse_rr);
+        esc_RL.set_pulse(pulse_rl);
+*/	
+	//dump_attitude();
+
 	led_update();
+	
+	delayMicroseconds(9500);
 }
