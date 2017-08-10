@@ -11,7 +11,7 @@
 #error This code runs on Teensy board >= 3.0
 #endif 
 
-#define RAVEN_VERSION "0.2.2"
+#define RAVEN_VERSION "0.2.3"
 
 // LED PINS
 const uint8_t LED_GREEN_PIN = 5;

@@ -60,11 +60,15 @@ BMP085 barometer;
 /* --- Flight Controller Data --- */
 // Drone attitude
 typedef struct {
+	int16_t ax, ay, az, gx, gy, gz;
+	
 	float x_acc, y_acc, z_acc;	// acceleration (m.s-2)
 	float x_rate, y_rate, z_rate;	// angular speeds (rads.s-1)
 	
 	float pitch, roll;		// pitch/roll angles (rads)
 
+	int16_t mx, my, mz;
+	
 	float heading, heading_p;	// current & previous heading (rads)
 	float rspeed;			// angular speed (rads.s-1)
 
@@ -104,7 +108,7 @@ PID pid_roll;
 PID pid_pitch;
 
 float yaw_setpoint, pitch_setpoint, roll_setpoint;
-float yaw_output, pitch_output, roll_output;
+int yaw_output, pitch_output, roll_output;
 
 Motor esc_FR(ESC_PIN_FR); // Front-Right CCW
 Motor esc_FL(ESC_PIN_FL); // Front-Left  CW
@@ -119,13 +123,20 @@ int16_t pulse_fr, pulse_fl, pulse_rr, pulse_rl;
 // Loop timer
 unsigned long timer = 0;
 
+// Infinite-Impulse-Response (IIR) single-pole low-pass filter
+// https://en.wikipedia.org/wiki/Low-pass_filter#Simple_infinite_impulse_response_filter
+float iir_lpf(float previous, float current, float alpha = 0.3)
+{
+	return previous + alpha * (current - previous);
+}
+
 /* ----- Get drone attitude ----- */
 void get_attitude(unsigned long ms)
 {
 	// Delta time in seconds
 	float dt = ms / 1000.0;
 
-        // Get raw values from MPU
+        // Raw values from MPU
 	int16_t ax, ay, az;
 	int16_t gx, gy, gz;
 	
@@ -133,19 +144,27 @@ void get_attitude(unsigned long ms)
 	mpu.getRotation(&gx, &gy, &gz);
 
 	// Accelerations (m.s-2)
-	attitude.x_acc = (9.81 * ax) / 16384.0;
-	attitude.y_acc = (9.81 * ay) / 16384.0;
-	attitude.z_acc = (9.81 * az) / 16384.0;
+	attitude.ax = iir_lpf(attitude.ax, ax);
+	attitude.ay = iir_lpf(attitude.ay, ay);
+	attitude.az = iir_lpf(attitude.az, az);
+	
+	attitude.x_acc = (9.81 * attitude.ax) / 16384.0;
+	attitude.y_acc = (9.81 * attitude.ay) / 16384.0;
+	attitude.z_acc = (9.81 * attitude.az) / 16384.0;
 	
 	// Angular speeds (rads.s-1)
 	// The sensor returns deg.s-1
-        attitude.x_rate = (gx * DEG2RAD) / 131.0; 
-        attitude.y_rate = (gy * DEG2RAD) / 131.0;
-        attitude.z_rate = (gz * DEG2RAD) / 131.0;
+	attitude.gx = iir_lpf(attitude.gx, gx);
+	attitude.gy = iir_lpf(attitude.gy, gy);
+	attitude.gz = iir_lpf(attitude.gz, gz);	
+	
+        attitude.x_rate = (attitude.gx * DEG2RAD) / 131.0; 
+        attitude.y_rate = (attitude.gy * DEG2RAD) / 131.0;
+        attitude.z_rate = (attitude.gz * DEG2RAD) / 131.0;
 
         // Orientation of the accelerometer relative to the earth
-        float x_angle = atan2(ay, az);
-        float y_angle = atan2(-ax, az);
+        float x_angle = atan2(attitude.ay, attitude.az);
+        float y_angle = atan2(-attitude.ax, attitude.az);
 
         // Pitch and roll angles (rads) corrected w/ complementary filter
         attitude.roll = ALPHA * (attitude.roll + attitude.x_rate * dt) + (1 - ALPHA) * x_angle; 
@@ -161,22 +180,24 @@ void get_attitude(unsigned long ms)
 
 	if (mx == -4096 || mx == -4096 || mz == -4096) {
 		Serial.println("Compass overflow");
-		mx = my = mz = 0;
-	} else {
-	
+	} else {	
 		// Swap X/Y to match MPU disposal on the board
 		temp = mx;
 		mx = -my;
 		my = temp;
+
+		attitude.mx = iir_lpf(attitude.mx, mx);
+		attitude.my = iir_lpf(attitude.my, my);
+		attitude.mz = iir_lpf(attitude.mz, mz);
 		
 		float cosRoll = cos(attitude.roll);
 	  	float sinRoll = sin(attitude.roll);  
 	  	float cosPitch = cos(attitude.pitch);
 	  	float sinPitch = sin(attitude.pitch);
 	  
-	  	// Tilt compensation
-	  	float Xh = mx * cosPitch + mz * sinPitch;
-	  	float Yh = mx * sinRoll * sinPitch + my * cosRoll - mz * sinRoll * cosPitch;
+	  	// Tilt compensation (rads)
+	  	float Xh = attitude.mx * cosPitch + attitude.mz * sinPitch;
+	  	float Yh = attitude.mx * sinRoll * sinPitch + attitude.my * cosRoll - attitude.mz * sinRoll * cosPitch;
 	 
 	  	attitude.heading = atan2(Yh, Xh) + off_decl;
 	
@@ -187,7 +208,7 @@ void get_attitude(unsigned long ms)
 	  	if (attitude.heading > 2 * PI) 
 	  		attitude.heading -= 2 * PI;  
 	
-	  	// Angular speed
+	  	// Angular speed (rads.s-1)
 	  	attitude.rspeed = (attitude.heading - attitude.heading_p) / dt;
 	}
 	
@@ -198,7 +219,7 @@ void get_attitude(unsigned long ms)
     	unsigned long lastMicros = micros();
     	while (micros() - lastMicros < barometer.getMeasureDelayMicroseconds());
 
-    	// Read calibrated temperature value in degrees Celsius
+    	// Read calibrated temperature value (deg. Celsius)
     	attitude.temperature = barometer.getTemperatureC();
 
 	// Request pressure (3x oversampling mode, high detail, 23.5ms delay)
@@ -208,7 +229,7 @@ void get_attitude(unsigned long ms)
     	// Read calibrated pressure value in Pascals (Pa)
     	attitude.pressure = barometer.getPressure();
 
-    	// Calculate absolute altitude in meters based on known pressure
+    	// Calculate absolute altitude (m) based on known pressure
     	attitude.altitude_p = attitude.altitude;  
 	
 	attitude.alt_samples[attitude.alt_idx] = barometer.getAltitude(attitude.pressure);
@@ -220,7 +241,7 @@ void get_attitude(unsigned long ms)
 
 	attitude.altitude /= ALT_SAMPLES;
 	
-	// Vertical speed
+	// Vertical speed (m.s-1)
     	attitude.vspeed = (attitude.altitude - attitude.altitude_p) / dt;
 }	
 
@@ -311,14 +332,14 @@ void setup()
 
         // Configure flight controller
 
-        // !! TBC !!
-        pid_yaw.set_kpid(200, 0.0, 0.0);
+        // Set PID coefficients & min/max values
+        pid_yaw.set_kpid(100, 5, 0.0);
         pid_yaw.set_minmax(-200, 200);
         
-        pid_pitch.set_kpid(200, 0.0, 0.0);
+        pid_pitch.set_kpid(250, 1, 0.0);
         pid_pitch.set_minmax(-200, 200);
         
-        pid_roll.set_kpid(200, 0.0, 0.0);
+        pid_roll.set_kpid(250, 1, 0.0);
         pid_roll.set_minmax(-200, 200);
 
         yaw_max_rate = (30 * DEG2RAD);
@@ -369,26 +390,26 @@ void dump_channels()
 // Dump attitude to serial
 void dump_attitude()
 {	
-	Serial.print(attitude.x_acc, 2);
+/*	Serial.print(attitude.x_acc, 2);
 	Serial.print(",");
 	Serial.print(attitude.y_acc, 2);
 	Serial.print(", ");
 	Serial.print(attitude.z_acc, 2);
 	Serial.print(", ");
-	Serial.print(attitude.x_rate * RAD2DEG, 2);
+*/	Serial.print(attitude.x_rate * RAD2DEG, 2);
 	Serial.print(", ");
 	Serial.print(attitude.y_rate * RAD2DEG, 2);
 	Serial.print(", ");
-	Serial.print(attitude.z_rate * RAD2DEG, 2);
+/*	Serial.print(attitude.z_rate * RAD2DEG, 2);
 	Serial.print(", ");
-	Serial.print(attitude.pitch * RAD2DEG, 2);
+*/	Serial.print(attitude.pitch * RAD2DEG, 2);
 	Serial.print(", ");
 	Serial.print(attitude.roll * RAD2DEG, 2);
 	Serial.print(", ");
-	Serial.print(attitude.heading * RAD2DEG, 2);
+/*	Serial.print(attitude.heading * RAD2DEG, 2);
 	Serial.print(", ");
-	Serial.print(attitude.rspeed * RAD2DEG, 2);
-	Serial.print(", ");
+*/	Serial.print(attitude.rspeed * RAD2DEG, 2);
+/*	Serial.print(", ");
 	Serial.print(attitude.altitude);
 	Serial.print(", ");
 	Serial.print(attitude.vspeed);
@@ -396,7 +417,7 @@ void dump_attitude()
 	Serial.print(attitude.temperature);
 	Serial.print(", ");
 	Serial.print(attitude.pressure);
-
+*/
 	Serial.println();
 }
 
@@ -462,64 +483,74 @@ void loop()
 */	
 	// Refresh drone attitude
 	get_attitude(dt);
-	//dump_attitude();
 	
         // Initialize all pulses w/ base pulse
         pulse_fr = pulse_fl = pulse_rr = pulse_rl = base_pulse;
 
-	yaw_setpoint = channels[CHNL_YAW] * yaw_max_rate;
+	/* PID outputs reaction & pulses evolution
+	 *  
+	 * | When               | output sign is         | 
+	 * -----------------------------------------------
+	 * | roll right / left  | roll_output  < 0 / > 0 |
+	 * | pitch front / rear | pitch_output < 0 / > 0 | 
+	 * | yaw_right / left   | yaw_output   < 0 / > 0 |
+	 */
+	yaw_setpoint = 0; //channels[CHNL_YAW] * yaw_max_rate;
 	yaw_output = pid_yaw.compute(attitude.rspeed, yaw_setpoint);
 
 	if (mode == FLIGHT_MODE_LEVELED) {
-		pitch_setpoint = channels[CHNL_PITCH] * pitch_max_angle;
-	        roll_setpoint = channels[CHNL_ROLL] * roll_max_angle;
+		pitch_setpoint = 0; //channels[CHNL_PITCH] * pitch_max_angle;
+	        roll_setpoint = 0; //channels[CHNL_ROLL] * roll_max_angle;
 
                 pitch_output = pid_pitch.compute(attitude.pitch, pitch_setpoint);
                 roll_output = pid_roll.compute(attitude.roll, roll_setpoint);
 
 	} else if (mode == FLIGHT_MODE_ACRO) {
-                pitch_setpoint = channels[CHNL_PITCH] * pitch_max_rate;
-		roll_setpoint = channels[CHNL_ROLL] * roll_max_rate;
+                pitch_setpoint = 0; //channels[CHNL_PITCH] * pitch_max_rate;
+		roll_setpoint = 0; //channels[CHNL_ROLL] * roll_max_rate;
 
                 pitch_output = pid_pitch.compute(attitude.y_rate, pitch_setpoint);
 		roll_output = pid_roll.compute(attitude.x_rate, roll_setpoint);
 	}
-
 	        
 	/* 
-	 *  To compute each motor speed, use the following rules:
+	 *  Adapt pulses of each motor using the following rules:
 	 * 
-	 *  pitch < 0 -> nose raises up -> front motors speed increases & back motors speed decreases
-	 *  pitch > 0 -> nose dips -> front motors speed decreases & back motors speed increases
-	 *   roll < 0 -> rolls left -> left motors speed decreases & right motors speed increases
-	 *   roll > 0 -> rolls right -> left motors speed increases & right motors speed decreases
-	 *    yaw < 0 -> rotate left -> front-right/back-left motors speed increases & front-left/back-right motors speed decreases
-	 *    yaw > 0 -> rotate right -> front-right/back-left motors speed decreases & front-left/back-right motors speed increases
+	 *  pitch_output < 0 -> nose dips      -> front motors speed increases & rear motors speed decreases
+	 *  pitch_output > 0 -> nose raises up -> front motors speed decreases & rear motors speed increases
+	 *   roll_output < 0 -> rolls right    -> left motors speed increases & right motors speed decreases
+	 *   roll_output > 0 -> rolls left     -> left motors speed decreases & right motors speed increases
+	 *    yaw_output < 0 -> rotate right   -> front-right/rear-left motors speed increases & front-left/rear-right motors speed decreases
+	 *    yaw_output > 0 -> rotate left    -> front-right/rear-left motors speed decreases & front-left/rear-right motors speed increases
 	 */
-        // https://www.youtube.com/watch?v=2MRiVSyedS4
-	// To be checked for the signs ...
 	pulse_fr += - pitch_output + roll_output - yaw_output;
 	pulse_rr += + pitch_output + roll_output + yaw_output;
 	pulse_rl += + pitch_output - roll_output - yaw_output;
 	pulse_fl += - pitch_output - roll_output + yaw_output;
-
-	Serial.print(pulse_fr);
-	Serial.print(" ");
-	Serial.print(pulse_fl);
-	Serial.print(" ");
-	Serial.print(pulse_rl);
-	Serial.print(" ");
-	Serial.println(pulse_rr);
-	
 /*
+	Serial.print("yaw_out:");
+	Serial.print(yaw_output);
+	Serial.print(" pitch_out:");
+	Serial.print(pitch_output);
+	Serial.print(" roll_output:");
+	Serial.println(roll_output);
+*/	
+/*
+	Serial.print("fr:");
+	Serial.print(pulse_fr);
+	Serial.print(" fl:");
+	Serial.print(pulse_fl);
+	Serial.print(" rl:");
+	Serial.print(pulse_rl);
+	Serial.print(" rr:");
+	Serial.println(pulse_rr);
+*/	
+
         esc_FR.set_pulse(pulse_fr);
         esc_FL.set_pulse(pulse_fl);
         esc_RR.set_pulse(pulse_rr);
-        esc_RL.set_pulse(pulse_rl);
-*/	
-	//dump_attitude();
+        esc_RL.set_pulse(pulse_rl);	
 
 	led_update();
-	
 	delayMicroseconds(9500);
 }
