@@ -4,7 +4,8 @@ PID::PID()
 {
         Serror = 0;
         lasterr = 0;
-        lasttime = millis();        
+        lasttime = millis();
+        minval = maxval = 0;        
 }
 
 PID::~PID() {}
@@ -34,13 +35,13 @@ void PID::set_kpid(float kp, float ki, float kd)
         Kd = kd;
 }
 
-void PID::set_minmax(float minv, float maxv)
+void PID::set_minmax(int minv, int maxv)
 {
         minval = minv;
         maxval = maxv;
 }
 
-float PID::compute(float real, float expected)
+int PID::compute(float real, float expected)
 {
         unsigned long now = millis(), ms = now - lasttime;
         // dt in seconds
@@ -48,12 +49,12 @@ float PID::compute(float real, float expected)
 
         // Error
         float error = expected - real; 
-        // Integral of the error
+        // Sum of the error (integral)
         float Sedt = Serror + (error * dt); 
         // Derivative
         float dedt = (error - lasterr) / dt;
 
-        float output = Kp * error + Ki * Sedt + Kd * dedt;
+        int output = (int)(Kp * error + Ki * Sedt + Kd * dedt);
         
         if (output > maxval)
                 output = maxval;

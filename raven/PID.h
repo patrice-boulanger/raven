@@ -20,17 +20,17 @@ public:
         void set_kpid(float kp, float ki, float kd);
 
         // Set bounds 
-        void set_minmax(float minv, float maxv);
+        void set_minmax(int minv, int maxv);
 
-        // Compute the correction factor based on input (real) & target (expected) values
-        float compute(float real, float expected);
+        // Compute the pulse correction based on input (real) & target (expected) values
+        int compute(float real, float expected);
         
 protected:
         // PID coefficients
         float Kp, Kd, Ki;
 
         // Bounds
-        float minval, maxval;
+        int minval, maxval;
 
         // Sum of previous error
         float Serror;
