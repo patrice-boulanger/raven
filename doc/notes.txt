@@ -1,17 +1,65 @@
 TODO:
 
-. LED:
-  . Sequences
-  . _ is pause (don't change anything)
-  . g/G means Green LED off/on
-  . r/R   -   Red    -     -
-  . w/W   -   White  -     -
-  . Restart from beginning if reach the end of the sequence
-  . Example: "GR______grW______w"
-  . "G__________gR___________rW__________w"
-  . functions set_leds() & update_leds()
+. Measure voltage from BEC & SBUS (oscilloscope ?) before/after decoupling
 
-. Buzzer
-  . 
+. Install a decoupling capacitor on the PDB
+. Install a decoupling capacitor on the SBUS pin (?)
+. Install a decoupling capacitor between Vcc & GND on the sensor board 
+. Interesting information at http://rab.ict.pwr.wroc.pl/~mw/Files/AN1646.pdf
+
+. Serial:
+  . https://www.pjrc.com/teensy/td_uart.html
+  . Serial1 & 2 support 8 byte transmit and receive FIFOs, which allow for higher speed baud rates, even when other libraries create interrupt latency.
+  . Try to move from Serial3 to Serial1/2: swap PIN7 -> PIN(0/9) & PIN8 -> PIN(1/10) to see if it solves interference problem
+
+. BMP180:
+  . From BMP085 datasheet:
+    "sampling rate can be increased up to 128 samples per second (standard mode). It is sufficient to measure the T°C only once per second
+     and use this value for all pressure measurements during the same period"
+    "All modes can be performed at higher speed, e.g up to 128 times per second for standard mode [...] This way the noise can be decreased further
+     by software averaging."
+
+  . Check calibration coefficients (Chinese):
+    #if BMP085_USE_DATASHEET_VALS
+      _bmp085_coeffs.ac1 = 408;
+      _bmp085_coeffs.ac2 = -72;
+      _bmp085_coeffs.ac3 = -14383;
+      _bmp085_coeffs.ac4 = 32741;
+      _bmp085_coeffs.ac5 = 32757;
+      _bmp085_coeffs.ac6 = 23153;
+      _bmp085_coeffs.b1  = 6190;
+      _bmp085_coeffs.b2  = 4;
+      _bmp085_coeffs.mb  = -32768;
+      _bmp085_coeffs.mc  = -8711;
+      _bmp085_coeffs.md  = 2868;
+      _bmp085Mode        = 0;
+    #else
+
+  . Startup time before after power-up the device: 10ms
+  . During operation, the device is sensitive to light. The hole in the top lid shall not be exposed to direct light during operation.
+  . 100nF between Vdd and GND for pullup resistors!
   
+. HMC5883 Datasheet
+  . Measurement Period, from receiving command to data ready: 6 ms
+  . Vdd is linked to GND via a 0.1µF capacitor for pullup resistors!
+  . The Table below shows all selectable output rates in continuous measurement mode. All three channels shall be measured within a given output rate
+  . With the data rate at the factory default of 15Hz updates, a 67 milli-second typical delay should be allowed by the I2C master before querying the HMC5883L data registers for new measurements.
+  . ( ... ) or monitor status register or DRDY hardware interrupt pin (OK)
+  . Procedure for "SCALE FACTOR TEMPERATURE COMPENSATION" available
+
+. MPU6050 Datasheet:
+  . GYROSCOPE START-UP TIME: 30 ms
+  . Interrupt Status can report interesting information: getIntFreefallStatus()/getIntMotionStatus()/getIntZeroMotionStatus()
+
+. EEPROM:
+  . Configuration struct: embeds all settings needed for raven
+  . Functions: eeprom_load(struct *) & eeprom_save(struct *)
+  . Checksum 
+
+. Shell:
+  . User command
+  . get/set/show
+
+. Pinout diagram embedded in the drone (?)
+
   
