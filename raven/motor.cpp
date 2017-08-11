@@ -14,7 +14,7 @@ Motor::Motor(uint8_t _pin, uint16_t _min_pulse, uint16_t _max_pulse) :
 
 Motor::~Motor()
 {
-	esc.writeMicroseconds(0);
+	esc.writeMicroseconds(min_pulse);
 }
 
 void Motor::set_pulse(uint16_t pulse)
