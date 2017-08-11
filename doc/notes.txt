@@ -1,16 +1,16 @@
 TODO:
 
-. Measure voltage from BEC & SBUS (oscilloscope ?) before/after decoupling
+NO . Measure voltage from BEC & SBUS (oscilloscope ?) before/after decoupling
 
-. Install a decoupling capacitor on the PDB
-. Install a decoupling capacitor on the SBUS pin (?)
-. Install a decoupling capacitor between Vcc & GND on the sensor board 
+. done: Install a decoupling capacitor on the PDB
+NO . Install a decoupling capacitor on the SBUS pin (?)
+. done: Install a decoupling capacitor between Vcc & GND on the sensor board 
 . Interesting information at http://rab.ict.pwr.wroc.pl/~mw/Files/AN1646.pdf
 
 . Serial:
   . https://www.pjrc.com/teensy/td_uart.html
   . Serial1 & 2 support 8 byte transmit and receive FIFOs, which allow for higher speed baud rates, even when other libraries create interrupt latency.
-  . Try to move from Serial3 to Serial1/2: swap PIN7 -> PIN(0/9) & PIN8 -> PIN(1/10) to see if it solves interference problem
+  . done: Try to move from Serial3 to Serial1/2: swap PIN7 -> PIN(0/9) & PIN8 -> PIN(1/10) to see if it solves interference problem
 
 . BMP180:
   . From BMP085 datasheet:

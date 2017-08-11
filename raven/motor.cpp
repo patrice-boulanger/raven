@@ -9,12 +9,12 @@ Motor::Motor(uint8_t _pin, uint16_t _min_pulse, uint16_t _max_pulse) :
 	 * and max. pulse width to 2400 microseconds. Set these values to 1000/2000 microseconds to fit common ESC settings.
 	 */ 
 	esc.attach(pin, min_pulse, max_pulse);
-	esc.writeMicroseconds(min_pulse);	
+	esc.writeMicroseconds(ESC_PULSE_MIN_WIDTH);	
 }
 
 Motor::~Motor()
 {
-	esc.writeMicroseconds(min_pulse);
+	esc.writeMicroseconds(0);
 }
 
 void Motor::set_pulse(uint16_t pulse)

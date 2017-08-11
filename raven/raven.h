@@ -14,18 +14,18 @@
 #define RAVEN_VERSION "0.2.3"
 
 // LED PINS
-const uint8_t LED_GREEN_PIN = 5;
-const uint8_t LED_RED_PIN = 4;
-const uint8_t LED_WHITE_PIN = 3;
+const uint8_t LED_GREEN_PIN = 5; // green
+const uint8_t LED_RED_PIN = 4;   // orange
+const uint8_t LED_WHITE_PIN = 3; // white
 
 // Buzzer
-const uint8_t BUZZER_PIN = 6;
+const uint8_t BUZZER_PIN = 6; // blue
 
 // User commands index
 const uint8_t CHNL_THROTTLE = 0;
-const uint8_t CHNL_YAW = 1;
+const uint8_t CHNL_ROLL = 1;
 const uint8_t CHNL_PITCH = 2;
-const uint8_t CHNL_ROLL = 3;
+const uint8_t CHNL_YAW = 3;
 const uint8_t CHNL_ARMED = 4;
 const uint8_t CHNL_BUZZER = 5;
 const uint8_t CHNL_CAMERA = 6;
@@ -35,10 +35,10 @@ const uint8_t CHNL_CAMERA = 6;
  * These pins are compatibles w/ either Servo or PWMServo libraries
  * See https://www.pjrc.com/teensy/td_libs_Servo.html for details
  * */
-const uint8_t ESC_PIN_FR = 20;
-const uint8_t ESC_PIN_FL = 21;
-const uint8_t ESC_PIN_RR = 22;
-const uint8_t ESC_PIN_RL = 23;
+const uint8_t ESC_PIN_FR = 20; // white
+const uint8_t ESC_PIN_FL = 21; // violet
+const uint8_t ESC_PIN_RR = 22; // blue
+const uint8_t ESC_PIN_RL = 23; // grey
 
 /* 
  * Pulses width in microseconds for ESC

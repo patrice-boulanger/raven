@@ -38,13 +38,12 @@ const float speed_scale = 0.5 * (ESC_PULSE_SPEED_FULL_WIDTH - ESC_PULSE_SPEED_0_
 /* ----- Variables ----- */
 
 // FRSky XSR receiver in SBUS mode on Serial2
-//  https://www.pjrc.com/teensy/td_uart.html:
+// https://www.pjrc.com/teensy/td_uart.html:
 // Serial1 & 2 support 8 byte transmit and receive FIFOs, which allow for higher speed baud rates, even when other libraries create interrupt latency.
 SBUS xsr(Serial2);
-
 // SBUS channels & data
 float channels[16];
-uint8_t failSafe;
+uint8_t failSafe = 0;
 uint16_t lostFrames = 0;
 
 MPU6050 mpu;
@@ -213,7 +212,7 @@ void get_attitude(unsigned long ms)
 	  	// Angular speed (rads.s-1)
 	  	attitude.rspeed = (attitude.heading - attitude.heading_p) / dt;
 	}
-	
+	/*
   	// Request temperature
     	barometer.setControl(BMP085_MODE_TEMPERATURE);
     
@@ -225,7 +224,7 @@ void get_attitude(unsigned long ms)
     	attitude.temperature = barometer.getTemperatureC();
 
 	// Request pressure (3x oversampling mode, high detail, 23.5ms delay)
-    	barometer.setControl(BMP085_MODE_PRESSURE_3);
+    	barometer.setControl(BMP085_MODE_PRESSURE_0);
     	while (micros() - lastMicros < barometer.getMeasureDelayMicroseconds());
 
     	// Read calibrated pressure value in Pascals (Pa)
@@ -244,7 +243,7 @@ void get_attitude(unsigned long ms)
 	attitude.altitude /= ALT_SAMPLES;
 	
 	// Vertical speed (m.s-1)
-    	attitude.vspeed = (attitude.altitude - attitude.altitude_p) / dt;
+    	attitude.vspeed = (attitude.altitude - attitude.altitude_p) / dt;*/
 }	
 
 /* -----  Setup ----- */
@@ -259,7 +258,6 @@ void setup()
 
         // Buzzer
         pinMode(BUZZER_PIN, OUTPUT);
-        buzzer_play(BUZZER_START);
         
 	// LEDs
 	pinMode(LED_GREEN_PIN, OUTPUT);
@@ -289,7 +287,7 @@ void setup()
 	// Check connection w/ compass
 	if (!compass.testConnection()) {
 		Serial.println(F("  Connection to HMC5883L failed !"));
-		while(true);
+		//while(true);
 	}
 	
   	// Configure
@@ -307,7 +305,7 @@ void setup()
 	// Check connection w/ barometer
 	if (!barometer.testConnection()) {
 		Serial.println(F("  Connection to BMP180 failed !"));
-		while(true);
+		//while(true);
 	}
 
 	// Initialize MPU
@@ -317,7 +315,7 @@ void setup()
 	// Check connection w/ MPU
 	if (!mpu.testConnection()) {
 		Serial.println(F("  Connection to MPU6050 failed !"));
-		while(true);
+		//while(true);
 	}
 
         // Configure
@@ -353,7 +351,7 @@ void setup()
 
         mode = FLIGHT_MODE_LEVELED;
 
-	led_sequence("rG__________gR__________");
+	led_sequence("G______________g______");
 	
 	Serial.print(F("Waiting for TX ... "));
 	
@@ -368,8 +366,7 @@ void setup()
 
 	Serial.println("OK");
 
-	buzzer_play(BUZZER_READY);
-	led_sequence("G__________gR__________rW__________w");
+	led_sequence("G_______________R_______________g_______r_______");
 
         timer = millis();
 	delay(20);
@@ -378,7 +375,7 @@ void setup()
 // Dump all SBUS channels to serial
 void dump_channels()
 {
-		for(int i = 0; i < 16; i ++) {
+		for(int i = 0; i < 7; i ++) {
 			Serial.print("Ch");
 			Serial.print(i);
 			Serial.print(": ");
@@ -426,63 +423,26 @@ void dump_attitude()
 /* ----- Main loop ----- */
 void loop()
 {	
+//	memset(channels, 16, sizeof(float));
+	
         unsigned long start = millis(), dt = start - timer;
         timer = start;
 
 	// Get user commands
-	if (xsr.readCal(&channels[0], &failSafe, &lostFrames)  && !failSafe) {
-		// Translate throttle command from [-1;1] -> [0;1]
-		//ESC_PULSE_SPEED_0_WIDTH + ((1.0 + throttle) / 2.0) * (ESC_PULSE_SPEED_FULL_WIDTH - ESC_PULSE_SPEED_0_WIDTH); 
-		base_pulse = ESC_PULSE_SPEED_0_WIDTH + (1.0 + channels[CHNL_THROTTLE]) * speed_scale; 
-	}
-	
-/*	armed = (channels[CHNL_ARMED] > 0);
-	if (armed) 
-		base_pulse = ESC_PULSE_SPEED_0_WIDTH;
-	else
-		base_pulse = ESC_PULSE_MIN_WIDTH;
-*/		
-/*
-        // Change status from SAFE to STOP only if throttle is 0 and arming switch is off
-	if (status == FLIGHT_STATUS_SAFE) {
-		Serial.println("SAFE");
-		if (!armed && throttle < 0.03) {
-			status = FLIGHT_STATUS_STOP;
-		} else{
-			// Stay safe
-			//Serial.println("Throttle lock safety");
-		} 
-		
-		base_pulse = ESC_PULSE_MIN_WIDTH;
+	if (xsr.readCal(channels, &failSafe, &lostFrames)) {
+		if (channels[CHNL_ARMED] > 0.9) {
+			// Translate throttle command from [-1;1] -> [0;1]
+			//ESC_PULSE_SPEED_0_WIDTH + ((1.0 + throttle) / 2.0) * (ESC_PULSE_SPEED_FULL_WIDTH - ESC_PULSE_SPEED_0_WIDTH); 
+			base_pulse = ESC_PULSE_SPEED_0_WIDTH + (1.0 + channels[CHNL_THROTTLE]) * speed_scale; 
+		} else
+			base_pulse = ESC_PULSE_MIN_WIDTH;
+
+
+		if (channels[CHNL_BUZZER] > 0.9) {
+			tone(BUZZER_PIN, 1320, 100);
+		}
 	}
 
-        // Change status from STOP to ARMED only if throttle is 0 and arming switch is on
-	if (status == FLIGHT_STATUS_STOP) {
-		Serial.println("STOP");
-		if (armed) {
-			if (throttle < 0.02) {
-				status = FLIGHT_STATUS_ARMED;
-				base_pulse = ESC_PULSE_SPEED_0_WIDTH;
-				Serial.println("Motors armed");
-			} else {
-				status = FLIGHT_STATUS_SAFE;
-				base_pulse = ESC_PULSE_MIN_WIDTH;
-			}
-		} else {
-			base_pulse = ESC_PULSE_MIN_WIDTH;
-		}
-	}
-	
-	if (status == FLIGHT_STATUS_ARMED) {
-		if (!armed) {
-			status = FLIGHT_STATUS_STOP;
-			base_pulse = ESC_PULSE_MIN_WIDTH;
-			Serial.println("Motors stop");
-		} else {
-			base_pulse = ESC_PULSE_SPEED_0_WIDTH + throttle * (ESC_PULSE_SPEED_FULL_WIDTH - ESC_PULSE_SPEED_0_WIDTH);
-		}
-	}
-*/	
 	// Refresh drone attitude
 	get_attitude(dt);
 	
@@ -525,34 +485,28 @@ void loop()
 	 *    yaw_output < 0 -> rotate right   -> front-right/rear-left motors speed increases & front-left/rear-right motors speed decreases
 	 *    yaw_output > 0 -> rotate left    -> front-right/rear-left motors speed decreases & front-left/rear-right motors speed increases
 	 */
-	pulse_fr += - pitch_output + roll_output - yaw_output;
-	pulse_rr += + pitch_output + roll_output + yaw_output;
-	pulse_rl += + pitch_output - roll_output - yaw_output;
-	pulse_fl += - pitch_output - roll_output + yaw_output;
-/*
-	Serial.print("yaw_out:");
-	Serial.print(yaw_output);
-	Serial.print(" pitch_out:");
-	Serial.print(pitch_output);
-	Serial.print(" roll_output:");
-	Serial.println(roll_output);
-*/	
-/*
-	Serial.print("fr:");
-	Serial.print(pulse_fr);
-	Serial.print(" fl:");
-	Serial.print(pulse_fl);
-	Serial.print(" rl:");
-	Serial.print(pulse_rl);
-	Serial.print(" rr:");
-	Serial.println(pulse_rr);
-*/	
+	if (channels[CHNL_ARMED] > 0.9) {
+		pulse_fr += - pitch_output - roll_output - yaw_output;
+		pulse_rr += + pitch_output - roll_output + yaw_output;
+		pulse_rl += + pitch_output + roll_output - yaw_output;
+		pulse_fl += - pitch_output + roll_output + yaw_output;
 
-        esc_FR.set_pulse(pulse_fr);
-        esc_FL.set_pulse(pulse_fl);
-        esc_RR.set_pulse(pulse_rr);
-        esc_RL.set_pulse(pulse_rl);	
-
+		Serial.print("fr:");
+		Serial.print(pulse_fr);
+		Serial.print(" fl:");
+		Serial.print(pulse_fl);
+		Serial.print(" rl:");
+		Serial.print(pulse_rl);
+		Serial.print(" rr:");
+		Serial.println(pulse_rr);
+		
+	/*
+	        esc_FR.set_pulse(pulse_fr);
+	        esc_FL.set_pulse(pulse_fl);
+	        esc_RR.set_pulse(pulse_rr);
+	        esc_RL.set_pulse(pulse_rl);	
+	*/	
+	}
+	
 	led_update();
-	delayMicroseconds(9500);
 }
