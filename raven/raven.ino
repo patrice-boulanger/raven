@@ -37,8 +37,10 @@ const float speed_scale = 0.5 * (ESC_PULSE_SPEED_FULL_WIDTH - ESC_PULSE_SPEED_0_
 
 /* ----- Variables ----- */
 
-// FRSky XSR receiver in SBUS mode on Serial3
-SBUS xsr(Serial3);
+// FRSky XSR receiver in SBUS mode on Serial2
+//  https://www.pjrc.com/teensy/td_uart.html:
+// Serial1 & 2 support 8 byte transmit and receive FIFOs, which allow for higher speed baud rates, even when other libraries create interrupt latency.
+SBUS xsr(Serial2);
 
 // SBUS channels & data
 float channels[16];
