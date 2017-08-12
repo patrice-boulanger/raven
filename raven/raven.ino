@@ -2,7 +2,7 @@
 #include "buzzer.h"
 #include "led.h"
 #include "motor.h"
-#include "PID.h"
+#include "PID_v1.h"
 /*
  * Use jrowberg I2Cdev library for MPU6050, HMC5883L & BMP085/180
  * https://github.com/jrowberg/i2cdevlib
@@ -66,12 +66,12 @@ typedef struct {
 	float x_acc, y_acc, z_acc;	// acceleration (m.s-2)
 	float x_rate, y_rate, z_rate;	// angular speeds (rads.s-1)
 	
-	float pitch, roll;		// pitch/roll angles (rads)
+	double pitch, roll;		// pitch/roll angles (rads)
 
 	int16_t mx, my, mz;
 	
-	float heading, heading_p;	// current & previous heading (rads)
-	float rspeed;			// angular speed (rads.s-1)
+	double heading, heading_p;	// current & previous heading (rads)
+	double rspeed;			// angular speed (rads.s-1)
 
 	float pressure;			// pressure (pa)
 	float temperature;		// temperature (deg. C)
@@ -104,12 +104,8 @@ float yaw_max_rate, pitch_max_rate, roll_max_rate;
 // Max. angles for self-level mode (rads)
 float pitch_max_angle, roll_max_angle;
 
-PID pid_yaw;
-PID pid_roll;
-PID pid_pitch;
-
-float yaw_setpoint, pitch_setpoint, roll_setpoint;
-int yaw_output, pitch_output, roll_output;
+double yaw_setpoint, pitch_setpoint, roll_setpoint;
+double yaw_output, pitch_output, roll_output;
 
 Motor esc_FR(ESC_PIN_FR); // Front-Right CCW
 Motor esc_FL(ESC_PIN_FL); // Front-Left  CW
@@ -123,6 +119,11 @@ int16_t pulse_fr, pulse_fl, pulse_rr, pulse_rl;
 
 // Loop timer
 unsigned long timer = 0;
+
+// Declare the PID at the end since they need to point to the variables
+PID pid_yaw(&attitude.rspeed, &yaw_output, &yaw_setpoint, 0.0, 0.0, 0.0, DIRECT);
+PID pid_roll(&attitude.roll, &roll_output, &roll_setpoint, 0, 0, 0, DIRECT);
+PID pid_pitch(&attitude.pitch, &pitch_output, &pitch_setpoint, 0, 0, 0, DIRECT);
 
 // Infinite-Impulse-Response (IIR) single-pole low-pass filter
 // https://en.wikipedia.org/wiki/Low-pass_filter#Simple_infinite_impulse_response_filter
@@ -301,6 +302,8 @@ void setup()
 	// Initialize barometer
 	Serial.println("> Initializing barometer");
 	barometer.initialize();
+	// Datasheet: startup time after power-up the device: 10ms
+	delay(10);
 	
 	// Check connection w/ barometer
 	if (!barometer.testConnection()) {
@@ -311,7 +314,9 @@ void setup()
 	// Initialize MPU
 	Serial.println(F("> Initializing MPU"));
 	mpu.initialize();
-
+	// Datasheet: gyroscope start-up time: 30ms
+	delay(30);
+	
 	// Check connection w/ MPU
 	if (!mpu.testConnection()) {
 		Serial.println(F("  Connection to MPU6050 failed !"));
@@ -333,21 +338,35 @@ void setup()
         // Configure flight controller
 
         // Set PID coefficients & min/max values
-        pid_yaw.set_kpid(100, 5, 0.0);
-        pid_yaw.set_minmax(-200, 200);
-        
-        pid_pitch.set_kpid(250, 1, 0.0);
-        pid_pitch.set_minmax(-200, 200);
-        
-        pid_roll.set_kpid(250, 1, 0.0);
-        pid_roll.set_minmax(-200, 200);
-
         yaw_max_rate = (30 * DEG2RAD);
         pitch_max_rate = (15 * DEG2RAD);
         roll_max_rate = (15 * DEG2RAD);
         
         pitch_max_angle = (15 * DEG2RAD);
         roll_max_angle = (15 * DEG2RAD);
+
+	pid_yaw.SetOutputLimits(0, 0);
+	pid_pitch.SetOutputLimits(-100, 100);
+	pid_roll.SetOutputLimits(-100, 100);
+
+	pid_yaw.SetTunings(0, 0, 0);
+	pid_pitch.SetTunings(100, 0, 0);
+	pid_roll.SetTunings(100, 0, 0);
+
+	//pid_yaw.SetMode(AUTOMATIC);
+	pid_pitch.SetMode(AUTOMATIC);
+	pid_roll.SetMode(AUTOMATIC);
+	
+/*      
+        pid_yaw.set_kpid(10, 0, 0.0);
+        pid_yaw.set_minmax(-20, 20);
+        
+        pid_pitch.set_kpid(200, 50, 0.0);
+        pid_pitch.set_minmax(-200, 200);
+        
+        pid_roll.set_kpid(200, 50, 0.0);
+        pid_roll.set_minmax(-200, 200);
+*/
 
         mode = FLIGHT_MODE_LEVELED;
 
@@ -369,6 +388,7 @@ void setup()
 	led_sequence("G_______________R_______________g_______r_______");
 
         timer = millis();
+        // Safety delay
 	delay(20);
 }
 
@@ -430,7 +450,7 @@ void loop()
 
 	// Get user commands
 	if (xsr.readCal(channels, &failSafe, &lostFrames)) {
-		if (channels[CHNL_ARMED] > 0.9) {
+		if (channels[CHNL_ARMED] > 0.0) {
 			// Translate throttle command from [-1;1] -> [0;1]
 			//ESC_PULSE_SPEED_0_WIDTH + ((1.0 + throttle) / 2.0) * (ESC_PULSE_SPEED_FULL_WIDTH - ESC_PULSE_SPEED_0_WIDTH); 
 			base_pulse = ESC_PULSE_SPEED_0_WIDTH + (1.0 + channels[CHNL_THROTTLE]) * speed_scale; 
@@ -458,21 +478,20 @@ void loop()
 	 * | yaw_right / left   | yaw_output   < 0 / > 0 |
 	 */
 	yaw_setpoint = 0; //channels[CHNL_YAW] * yaw_max_rate;
-	yaw_output = pid_yaw.compute(attitude.rspeed, yaw_setpoint);
+	pid_yaw.Compute();
 
 	if (mode == FLIGHT_MODE_LEVELED) {
-		pitch_setpoint = 0; //channels[CHNL_PITCH] * pitch_max_angle;
-	        roll_setpoint = 0; //channels[CHNL_ROLL] * roll_max_angle;
+		pitch_setpoint = channels[CHNL_PITCH] * pitch_max_angle;
+	        roll_setpoint = channels[CHNL_ROLL] * roll_max_angle;
 
-                pitch_output = pid_pitch.compute(attitude.pitch, pitch_setpoint);
-                roll_output = pid_roll.compute(attitude.roll, roll_setpoint);
-
+		pid_pitch.Compute();
+		pid_roll.Compute();
 	} else if (mode == FLIGHT_MODE_ACRO) {
-                pitch_setpoint = 0; //channels[CHNL_PITCH] * pitch_max_rate;
-		roll_setpoint = 0; //channels[CHNL_ROLL] * roll_max_rate;
+                pitch_setpoint = channels[CHNL_PITCH] * pitch_max_rate;
+		roll_setpoint = channels[CHNL_ROLL] * roll_max_rate;
 
-                pitch_output = pid_pitch.compute(attitude.y_rate, pitch_setpoint);
-		roll_output = pid_roll.compute(attitude.x_rate, roll_setpoint);
+		pid_pitch.Compute();
+		pid_roll.Compute();
 	}
 	        
 	/* 
@@ -485,28 +504,34 @@ void loop()
 	 *    yaw_output < 0 -> rotate right   -> front-right/rear-left motors speed increases & front-left/rear-right motors speed decreases
 	 *    yaw_output > 0 -> rotate left    -> front-right/rear-left motors speed decreases & front-left/rear-right motors speed increases
 	 */
-	if (channels[CHNL_ARMED] > 0.9) {
-		pulse_fr += - pitch_output - roll_output - yaw_output;
-		pulse_rr += + pitch_output - roll_output + yaw_output;
-		pulse_rl += + pitch_output + roll_output - yaw_output;
-		pulse_fl += - pitch_output + roll_output + yaw_output;
-
-		Serial.print("fr:");
-		Serial.print(pulse_fr);
-		Serial.print(" fl:");
-		Serial.print(pulse_fl);
-		Serial.print(" rl:");
-		Serial.print(pulse_rl);
-		Serial.print(" rr:");
-		Serial.println(pulse_rr);
-		
-	/*
-	        esc_FR.set_pulse(pulse_fr);
-	        esc_FL.set_pulse(pulse_fl);
-	        esc_RR.set_pulse(pulse_rr);
-	        esc_RL.set_pulse(pulse_rl);	
-	*/	
+	if (channels[CHNL_ARMED] > 0.0) {
+		pulse_fr += - pitch_output - roll_output; // - yaw_output;
+		pulse_rr += + pitch_output - roll_output; // + yaw_output;
+		pulse_rl += + pitch_output + roll_output; // - yaw_output;
+		pulse_fl += - pitch_output + roll_output; // + yaw_output;
 	}
-	
+
+        esc_FR.set_pulse(pulse_fr);
+        esc_FL.set_pulse(pulse_fl);
+        esc_RR.set_pulse(pulse_rr);
+        esc_RL.set_pulse(pulse_rl);	
+
+	Serial.print("pitch setpoint/output:");
+	Serial.print(pitch_setpoint);
+	Serial.print("/");
+	Serial.print(pitch_output);
+	Serial.print(" roll setpoint/output:");
+	Serial.print(roll_setpoint);
+	Serial.print("/");
+	Serial.print(roll_output);
+	Serial.print(" -- fr:");
+	Serial.print(pulse_fr);
+	Serial.print(" fl:");
+	Serial.print(pulse_fl);
+	Serial.print(" rl:");
+	Serial.print(pulse_rl);
+	Serial.print(" rr:");
+	Serial.println(pulse_rr);
+
 	led_update();
 }
