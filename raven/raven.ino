@@ -27,6 +27,12 @@
 // Number of samples for altitude averaging
 #define ALT_SAMPLES             20
 
+// Round a double to limit the number of digits after comma
+#define ROUND1(x) (( (double)((int)((x) * 10)) ) / 10.0)
+#define ROUND2(x) (( (double)((int)((x) * 100)) ) / 100.0)
+#define ROUND3(x) (( (double)((int)((x) * 1000)) ) / 1000.0)
+#define ROUND4(x) (( (double)((int)((x) * 10000)) ) / 10000.0)
+
 // Degrees/radians conversion
 const float RAD2DEG = 180.0/M_PI;
 const float DEG2RAD = M_PI/180.0;
@@ -122,8 +128,8 @@ unsigned long timer = 0;
 
 // Declare the PID at the end since they need to point to the variables
 PID pid_yaw(&attitude.rspeed, &yaw_output, &yaw_setpoint, 0.0, 0.0, 0.0, DIRECT);
-PID pid_roll(&attitude.roll, &roll_output, &roll_setpoint, 0, 0, 0, DIRECT);
-PID pid_pitch(&attitude.pitch, &pitch_output, &pitch_setpoint, 0, 0, 0, DIRECT);
+PID pid_roll(&attitude.roll, &roll_output, &roll_setpoint, 0, 0, 0, P_ON_E, DIRECT);
+PID pid_pitch(&attitude.pitch, &pitch_output, &pitch_setpoint, 0, 0, 0, P_ON_E, DIRECT);
 
 // Infinite-Impulse-Response (IIR) single-pole low-pass filter
 // https://en.wikipedia.org/wiki/Low-pass_filter#Simple_infinite_impulse_response_filter
@@ -169,9 +175,12 @@ void get_attitude(unsigned long ms)
         float y_angle = atan2(-attitude.ax, attitude.az);
 
         // Pitch and roll angles (rads) corrected w/ complementary filter
-        attitude.roll = ALPHA * (attitude.roll + attitude.x_rate * dt) + (1 - ALPHA) * x_angle; 
-        attitude.pitch = ALPHA * (attitude.pitch + attitude.y_rate * dt) + (1 - ALPHA) * y_angle; 
+        double nr = ALPHA * (attitude.roll + attitude.x_rate * dt) + (1 - ALPHA) * x_angle; 
+        double np = ALPHA * (attitude.pitch + attitude.y_rate * dt) + (1 - ALPHA) * y_angle; 
 
+	attitude.roll = ROUND4(iir_lpf(attitude.roll, nr));	
+	attitude.pitch = ROUND4(iir_lpf(attitude.pitch, np));
+	
 	// Backup previous heading
 	attitude.heading_p = attitude.heading;
 
@@ -209,6 +218,8 @@ void get_attitude(unsigned long ms)
                       
 	  	if (attitude.heading > 2 * PI) 
 	  		attitude.heading -= 2 * PI;  
+
+		attitude.heading = ROUND2(attitude.heading);
 	
 	  	// Angular speed (rads.s-1)
 	  	attitude.rspeed = (attitude.heading - attitude.heading_p) / dt;
@@ -350,13 +361,17 @@ void setup()
 	pid_roll.SetOutputLimits(-100, 100);
 
 	pid_yaw.SetTunings(0, 0, 0);
-	pid_pitch.SetTunings(100, 0, 0);
-	pid_roll.SetTunings(100, 0, 0);
+	pid_pitch.SetTunings(1.3, 0.04, 16);
+	pid_roll.SetTunings(1.3, 0.04, 16);
+
+	pid_yaw.SetSampleTime(3);
+	pid_pitch.SetSampleTime(1);
+	pid_roll.SetSampleTime(1);
 
 	//pid_yaw.SetMode(AUTOMATIC);
 	pid_pitch.SetMode(AUTOMATIC);
 	pid_roll.SetMode(AUTOMATIC);
-	
+
 /*      
         pid_yaw.set_kpid(10, 0, 0.0);
         pid_yaw.set_minmax(-20, 20);
@@ -385,7 +400,7 @@ void setup()
 
 	Serial.println("OK");
 
-	led_sequence("G_______________R_______________g_______r_______");
+	led_sequence("G_______________R_______________W_______________g_______r_______");
 
         timer = millis();
         // Safety delay
@@ -481,14 +496,21 @@ void loop()
 	pid_yaw.Compute();
 
 	if (mode == FLIGHT_MODE_LEVELED) {
-		pitch_setpoint = channels[CHNL_PITCH] * pitch_max_angle;
-	        roll_setpoint = channels[CHNL_ROLL] * roll_max_angle;
+		if (abs(channels[CHNL_PITCH]) > 0.05) 
+			pitch_setpoint = ROUND3(channels[CHNL_PITCH] * pitch_max_angle);
+	        else
+	        	pitch_setpoint = 0;
 
+	        if (abs(channels[CHNL_ROLL]) > 0.05) 	
+	        	roll_setpoint = ROUND3(channels[CHNL_ROLL] * roll_max_angle);
+		else
+			roll_setpoint = 0;
+			
 		pid_pitch.Compute();
 		pid_roll.Compute();
 	} else if (mode == FLIGHT_MODE_ACRO) {
-                pitch_setpoint = channels[CHNL_PITCH] * pitch_max_rate;
-		roll_setpoint = channels[CHNL_ROLL] * roll_max_rate;
+                pitch_setpoint = ROUND3(channels[CHNL_PITCH] * pitch_max_rate);
+		roll_setpoint = ROUND3(channels[CHNL_ROLL] * roll_max_rate);
 
 		pid_pitch.Compute();
 		pid_roll.Compute();
@@ -505,10 +527,10 @@ void loop()
 	 *    yaw_output > 0 -> rotate left    -> front-right/rear-left motors speed decreases & front-left/rear-right motors speed increases
 	 */
 	if (channels[CHNL_ARMED] > 0.0) {
-		pulse_fr += - pitch_output - roll_output; // - yaw_output;
-		pulse_rr += + pitch_output - roll_output; // + yaw_output;
-		pulse_rl += + pitch_output + roll_output; // - yaw_output;
-		pulse_fl += - pitch_output + roll_output; // + yaw_output;
+		pulse_fr += - (int)(pitch_output * 100) - (int)(roll_output*100); // - yaw_output;
+		pulse_rr += + (int)(pitch_output * 100) - (int)(roll_output*100); // + yaw_output;
+		pulse_rl += + (int)(pitch_output * 100) + (int)(roll_output*100); // - yaw_output;
+		pulse_fl += - (int)(pitch_output * 100) + (int)(roll_output*100); // + yaw_output;
 	}
 
         esc_FR.set_pulse(pulse_fr);
@@ -516,12 +538,16 @@ void loop()
         esc_RR.set_pulse(pulse_rr);
         esc_RL.set_pulse(pulse_rl);	
 
-	Serial.print("pitch setpoint/output:");
-	Serial.print(pitch_setpoint);
+	Serial.print("pitch setpoint/value/output:");
+	Serial.print(pitch_setpoint,4);
+	Serial.print("/");
+	Serial.print(attitude.pitch, 4);
 	Serial.print("/");
 	Serial.print(pitch_output);
-	Serial.print(" roll setpoint/output:");
-	Serial.print(roll_setpoint);
+	Serial.print(" roll setpoint/value/output:");
+	Serial.print(roll_setpoint,4);
+	Serial.print("/");
+	Serial.print(attitude.roll, 4);
 	Serial.print("/");
 	Serial.print(roll_output);
 	Serial.print(" -- fr:");
@@ -534,4 +560,7 @@ void loop()
 	Serial.println(pulse_rr);
 
 	led_update();
+
+//	unsigned long dt_loop = millis() - start;
+//	Serial.println(dt_loop);
 }
