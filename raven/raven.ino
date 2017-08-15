@@ -3,9 +3,13 @@
 #include "led.h"
 #include "motor.h"
 #include <Servo.h>
+/*
+ * br3ttb PID library
+ * https://github.com/br3ttb/Arduino-PID-Library.git
+ */
 #include "PID_v1.h"
 /*
- * Use jrowberg I2Cdev library for MPU6050, HMC5883L & BMP085/180
+ * jrowberg I2Cdev library for MPU6050, HMC5883L & BMP085/180
  * https://github.com/jrowberg/i2cdevlib
  */ 
 #include "I2Cdev.h"
@@ -15,7 +19,7 @@
 #include "HMC5883L.h"
 #include "BMP085.h"
 /* 
- * Use bolderflight SBUS library for Teensy 
+ * bolderflight SBUS library for Teensy 
  * https://github.com/bolderflight/SBUS.git
  */
 #include "SBUS.h"
