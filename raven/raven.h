@@ -29,6 +29,7 @@ const uint8_t CHNL_YAW = 3;
 const uint8_t CHNL_ARMED = 4;
 const uint8_t CHNL_BUZZER = 5;
 const uint8_t CHNL_CAMERA = 6;
+const uint8_t CHNL_GIMBAL = 7;
 
 /* 
  * Pin numbers for ESC signals
@@ -39,6 +40,14 @@ const uint8_t ESC_PIN_FR = 20; // white
 const uint8_t ESC_PIN_FL = 21; // violet
 const uint8_t ESC_PIN_RR = 22; // blue
 const uint8_t ESC_PIN_RL = 23; // grey
+
+/*
+ * Gimbal Pin number
+ */
+const uint8_t GIMBAL_PIN = 14;
+const uint8_t GIMBAL_MIN_ANGLE = 50;
+const uint8_t GIMBAL_MIDDLE = 90;
+const uint8_t GIMBAL_MAX_ANGLE = 180;
 
 /* 
  * Pulses width in microseconds for ESC
