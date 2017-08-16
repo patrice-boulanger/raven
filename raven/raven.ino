@@ -1,3 +1,14 @@
+
+#if 0
+// Log messages to BT through Serial3
+#define PRINT(m) 	Serial3.print(m)
+#define PRINTLN(m) 	Serial3.println(m) 
+#else
+// Log messages to regular serial console (USB)
+#define PRINT(m)	Serial.print(m)
+#define PRINTLN(m) 	Serial.println(m)
+#endif
+
 #include "raven.h"
 #include "buzzer.h"
 #include "led.h"
@@ -48,7 +59,7 @@
 // https://www.pjrc.com/teensy/td_uart.html:
 // Serial1 & 2 support 8 byte transmit and receive FIFOs, which allow for higher speed baud rates, even when other libraries create interrupt latency.
 SBUS xsr(Serial2);
-// SBUS channels & data
+// SBUS calibrated data
 float channels[16];
 uint8_t failSafe = 0;
 uint16_t lostFrames = 0;
@@ -105,6 +116,9 @@ bool armed = false;
 bool buzzer = false;
 // Camera angle setpoint
 float camera_angle = 0;
+// Gimbal enable
+bool gimbal_enable = false;
+
 Servo gimbal;
 
 // Max. rates for acro mode (rads.s-1)
@@ -195,7 +209,7 @@ void get_attitude(unsigned long ms)
 	compass.getHeading(&mx, &my, &mz);
 
 	if (mx == -4096 || mx == -4096 || mz == -4096) {
-		Serial.println("Compass overflow");
+		PRINTLN("Compass overflow");
 	} else {	
 		// Swap X/Y to match MPU disposal on the board
 		temp = mx;
@@ -265,12 +279,10 @@ void get_attitude(unsigned long ms)
 /* -----  Setup ----- */
 void setup()
 {
+	int cnt;
+	
 	// Start serial console
-	Serial.begin(9600);
-
-	Serial.print(F("raven v"));
-	Serial.print(RAVEN_VERSION);
-	Serial.println(F(" starting"));
+	Serial.begin(115200);
 
         // Buzzer
         pinMode(BUZZER_PIN, OUTPUT);
@@ -283,6 +295,15 @@ void setup()
 	led_clear();
 	led_on(LED_RED_PIN);
 
+	// Bluetooth module
+	Serial3.begin(57600);
+
+	// Welcome message
+	PRINTLN(F("\r\n---------------------"));
+	PRINT(F("raven v"));
+	PRINT(RAVEN_VERSION);
+	PRINTLN(F(" starting"));
+	
 	// Gimbal dance
 	gimbal.attach(GIMBAL_PIN);
 	gimbal.write(GIMBAL_MIDDLE);
@@ -294,28 +315,34 @@ void setup()
 	gimbal.write(GIMBAL_MIDDLE);
 	delay(500);
 	
-	Serial.println(F("> Initializing SBUS RX"));
+	PRINTLN(F("> SBUS receiver"));
 	xsr.begin();
 	
 	// Join I2C bus (I2Cdev library doesn't do this automatically)
-	Serial.println(F("> Initializing I2C bus"));
+	PRINT(F("> I2C bus "));
         Wire.begin();
         Wire.setClock(400000); // 400kHz I2C clock
 
-	delay(2000);
-
+	for(int i = 0; i < 5; i ++) {
+		PRINT(".");
+		delay(400);
+	}
+	
+	PRINTLN(" ok");
+	
 	// Clear attitude data
 	memset(&attitude, 0, sizeof(attitude_t));
 
 	// Initialize compass
-	Serial.println("> Initializing compass");
+	PRINT("> HMC5883L magnetometer: ");
 	compass.initialize();
 	
 	// Check connection w/ compass
 	if (!compass.testConnection()) {
-		Serial.println(F("  Connection to HMC5883L failed !"));
-		//while(true);
-	}
+		PRINTLN(F("failed"));
+		while(true);
+	} else
+		PRINTLN(F("ok"));
 	
   	// Configure
 	compass.setGain(HMC5883L_GAIN_1090);
@@ -326,28 +353,30 @@ void setup()
 	off_decl = off_decl_deg + (off_decl_min / 60.0);
   	
 	// Initialize barometer
-	Serial.println("> Initializing barometer");
+	PRINT("> BMP180 barometer: ");
 	barometer.initialize();
 	// Datasheet: startup time after power-up the device: 10ms
 	delay(10);
 	
 	// Check connection w/ barometer
 	if (!barometer.testConnection()) {
-		Serial.println(F("  Connection to BMP180 failed !"));
-		//while(true);
-	}
-
+		PRINTLN(F("failed"));
+		while(true);
+	} else 
+		PRINTLN(F("ok"));
+		
 	// Initialize MPU
-	Serial.println(F("> Initializing MPU"));
+	PRINT(F("> MPU6050 mpu: "));
 	mpu.initialize();
 	// Datasheet: gyroscope start-up time: 30ms
 	delay(30);
 	
 	// Check connection w/ MPU
 	if (!mpu.testConnection()) {
-		Serial.println(F("  Connection to MPU6050 failed !"));
+		PRINTLN(F("failed"));
 		while(true);
-	}
+	} else 
+		PRINTLN(F("ok"));
 
         // Configure
 	mpu.setFullScaleGyroRange(MPU6050_GYRO_FS_250); // +/- 250 degrees/sec 
@@ -362,7 +391,8 @@ void setup()
 	mpu.setZGyroOffset(off_gz);
 
         // Configure flight controller
-
+	PRINTLN(F("> PID controllers"));
+	
         // PID: max. angular speeds & angles 
         yaw_max_rate = 10;
         pitch_max_rate = 5;
@@ -387,9 +417,9 @@ void setup()
 
 	led_sequence("G______________g______");
 	
-	Serial.print(F("Waiting for TX ... "));
+	PRINT(F("Waiting for TX ... "));
 	
-        int cnt = 10;
+        cnt = 10;
         while(cnt != 0) {
 		if (xsr.readCal(&channels[0], &failSafe, &lostFrames) && !failSafe)
                         cnt --;
@@ -398,7 +428,7 @@ void setup()
 		delay(10);
 	}
 
-	Serial.println("OK");
+	PRINTLN("OK");
 
 	led_sequence("G_______________R_______________W_______________g_______r_______");
 
@@ -412,53 +442,55 @@ void setup()
 void dump_channels()
 {
 		for(int i = 0; i < 7; i ++) {
-			Serial.print("Ch");
-			Serial.print(i);
-			Serial.print(": ");
-			Serial.print(channels[i]);
-			Serial.print(" ");
+			PRINT("Ch");
+			PRINT(i);
+			PRINT(": ");
+			PRINT(channels[i]);
+			PRINT(" ");
 		}
 
-		Serial.println();
+		PRINTLN();
 }
 
 // Dump attitude to serial
 void dump_attitude()
 {	
-/*	Serial.print(attitude.x_acc, 2);
-	Serial.print(",");
-	Serial.print(attitude.y_acc, 2);
-	Serial.print(", ");
-	Serial.print(attitude.z_acc, 2);
-	Serial.print(", ");
-*/	Serial.print(attitude.x_rate, 2);
-	Serial.print(", ");
-	Serial.print(attitude.y_rate, 2);
-	Serial.print(", ");
-/*	Serial.print(attitude.z_rate * RAD2DEG, 2);
-	Serial.print(", ");
-*/	Serial.print(attitude.pitch, 2);
-	Serial.print(", ");
-	Serial.print(attitude.roll, 2);
-	Serial.print(", ");
-/*	Serial.print(attitude.heading * RAD2DEG, 2);
-	Serial.print(", ");
-*/	Serial.print(attitude.rspeed, 2);
-/*	Serial.print(", ");
-	Serial.print(attitude.altitude);
-	Serial.print(", ");
-	Serial.print(attitude.vspeed);
-	Serial.print(", ");
-	Serial.print(attitude.temperature);
-	Serial.print(", ");
-	Serial.print(attitude.pressure);
+/*	PRINT(attitude.x_acc, 2);
+	PRINT(",");
+	PRINT(attitude.y_acc, 2);
+	PRINT(", ");
+	PRINT(attitude.z_acc, 2);
+	PRINT(", ");
+*/	PRINT(attitude.x_rate);
+	PRINT(", ");
+	PRINT(attitude.y_rate);
+	PRINT(", ");
+/*	PRINT(attitude.z_rate * RAD2DEG, 2);
+	PRINT(", ");
+*/	PRINT(attitude.pitch);
+	PRINT(", ");
+	PRINT(attitude.roll);
+	PRINT(", ");
+/*	PRINT(attitude.heading * RAD2DEG, 2);
+	PRINT(", ");
+*/	PRINT(attitude.rspeed);
+/*	PRINT(", ");
+	PRINT(attitude.altitude);
+	PRINT(", ");
+	PRINT(attitude.vspeed);
+	PRINT(", ");
+	PRINT(attitude.temperature);
+	PRINT(", ");
+	PRINT(attitude.pressure);
 */
-	Serial.println();
+	PRINTLN();
 }
 
 /* ----- Main loop ----- */
 void loop()
 {	
+	bool armed_prev = armed, buzzer_prev = buzzer, gimbal_prev = gimbal_enable;
+	
 	memset(channels, 16, sizeof(float));
 	
         unsigned long start = millis(), dt = start - timer;
@@ -466,10 +498,28 @@ void loop()
 
 	// Get user commands
 	if (xsr.readCal(channels, &failSafe, &lostFrames)) {
+		// Get flags
+		armed = (channels[CHNL_ARMED] > 0.0);
+		if (armed != armed_prev) {
+			PRINT(F("Motors "));
+			PRINTLN(armed ? F("on") : F("off"));
+		}
+		
+		buzzer = (channels[CHNL_BUZZER] > 0.9);
+		if (buzzer && buzzer != buzzer_prev) {
+			PRINTLN(F("Buzzer rings"));
+		}
+
+		gimbal_enable = (channels[CHNL_GIMBAL] > 0.9);
+		if (gimbal_enable != gimbal_prev) {
+			PRINT(F("Gimbal compensation "));
+			PRINTLN(gimbal_enable ? F("enabled") : F("disabled"));
+		}
+		 
 		// channel[-1; 1] -> camera_angle[0;180]
 		camera_angle = 90 * (1 + channels[CHNL_CAMERA]);
 		 
-		if (channels[CHNL_ARMED] > 0.0) {
+		if (armed) {
 			// Activate PID
 			//pid_yaw.SetMode(AUTOMATIC);
 			pid_pitch.SetMode(AUTOMATIC);
@@ -486,7 +536,7 @@ void loop()
 			base_pulse = ESC_PULSE_MIN_WIDTH;
 		}
 
-		if (channels[CHNL_BUZZER] > 0.9) {
+		if (buzzer) {
 			tone(BUZZER_PIN, 1320, 100);
 		}
 	}
@@ -542,32 +592,32 @@ void loop()
 	 *    yaw_output < 0 -> rotate right   -> front-right/rear-left motors speed increases & front-left/rear-right motors speed decreases
 	 *    yaw_output > 0 -> rotate left    -> front-right/rear-left motors speed decreases & front-left/rear-right motors speed increases
 	 */
-	if (channels[CHNL_ARMED] > 0.0) {
+	if (armed) {
 		pulse_fr += - (int)(pitch_output) - (int)(roll_output); // - yaw_output;
 		pulse_rr += + (int)(pitch_output) - (int)(roll_output); // + yaw_output;
 		pulse_rl += + (int)(pitch_output) + (int)(roll_output); // - yaw_output;
 		pulse_fl += - (int)(pitch_output) + (int)(roll_output); // + yaw_output;
 		
-/*		Serial.print("pitch setpoint/value/output:");
-		Serial.print(pitch_setpoint,2);
-		Serial.print("/");
-		Serial.print(attitude.pitch, 2);
-		Serial.print("/");
-		Serial.print(pitch_output);
-		Serial.print(" roll setpoint/value/output:");
-		Serial.print(roll_setpoint,2);
-		Serial.print("/");
-		Serial.print(attitude.roll,2);
-		Serial.print("/");
-		Serial.print(roll_output);
-		Serial.print(" -- fr:");
-		Serial.print(pulse_fr);
-		Serial.print(" fl:");
-		Serial.print(pulse_fl);
-		Serial.print(" rl:");
-		Serial.print(pulse_rl);
-		Serial.print(" rr:");
-		Serial.println(pulse_rr);
+/*		PRINT("pitch setpoint/value/output:");
+		PRINT(pitch_setpoint,2);
+		PRINT("/");
+		PRINT(attitude.pitch, 2);
+		PRINT("/");
+		PRINT(pitch_output);
+		PRINT(" roll setpoint/value/output:");
+		PRINT(roll_setpoint,2);
+		PRINT("/");
+		PRINT(attitude.roll,2);
+		PRINT("/");
+		PRINT(roll_output);
+		PRINT(" -- fr:");
+		PRINT(pulse_fr);
+		PRINT(" fl:");
+		PRINT(pulse_fl);
+		PRINT(" rl:");
+		PRINT(pulse_rl);
+		PRINT(" rr:");
+		PRINTLN(pulse_rr);
 */	}
 
         esc_FR.set_pulse(pulse_fr);
@@ -578,7 +628,7 @@ void loop()
 	// If gimbal mode enabled, compensate the pitch angle of the drone to fix camera angle
 	float gimbal_angle = camera_angle;
 	
-	if (channels[CHNL_GIMBAL] > 0.9)
+	if (gimbal_enable)
 		gimbal_angle -= attitude.pitch;
 
 	if (gimbal_angle < GIMBAL_MIN_ANGLE)
@@ -591,5 +641,5 @@ void loop()
 	led_update();
 
 //	unsigned long dt_loop = millis() - start;
-//	Serial.println(dt_loop);
+//	PRINTLN(dt_loop);
 }
