@@ -11,7 +11,7 @@
 #error This code runs on Teensy board >= 3.0
 #endif 
 
-#define RAVEN_VERSION "0.2.3"
+#define RAVEN_VERSION "0.2.5"
 
 // LED PINS
 const uint8_t LED_GREEN_PIN = 5; // green
@@ -65,21 +65,15 @@ const int ESC_PULSE_MAX_WIDTH = 2000;
 const int ESC_PULSE_MIDDLE = 1500;
 
 /*
- * Flight controller status
- */
-// Motors security mode, everything stopped
-const uint8_t FLIGHT_STATUS_SAFE = 0;
-// Motors stopped
-const uint8_t FLIGHT_STATUS_STOP = 1;
-// Alarm if throttle != 0 or motors armed
-const uint8_t FLIGHT_STATUS_ALARM = 2;
-// Motors running, ready to fly
-const uint8_t FLIGHT_STATUS_ARMED = 3;
-
-/*
  * Flight modes
  */
-const uint8_t FLIGHT_MODE_LEVELED = 0;
+const uint8_t FLIGHT_MODE_AUTO_LEVEL = 0;
 const uint8_t FLIGHT_MODE_ACRO = 1;
+
+/* 
+ * Degrees/radians conversion 
+ */
+#define RAD2DEG(r) ((r) * 180.0 / M_PI)
+#define DEG2RAD(d) ((d) * M_PI / 180.0)
 
 #endif // _RAVEN_H
