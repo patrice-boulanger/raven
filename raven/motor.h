@@ -11,7 +11,7 @@ public:
 	~Motor();
 
 	/*
-	 * Set the speed of the motor
+	 * Set the m_pulse of the motor
 	 */
 	void set_pulse(uint16_t pulse);
 
@@ -22,7 +22,7 @@ protected:
 	
 	uint8_t pin;
 	uint16_t min_pulse, max_pulse;
-	uint16_t speed;
+	uint16_t m_pulse;
 };
 
 #endif // _RAVEN_MOTORS_H

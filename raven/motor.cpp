@@ -2,7 +2,7 @@
 #include "motor.h"
 
 Motor::Motor(uint8_t _pin, uint16_t _min_pulse, uint16_t _max_pulse) :
-	pin(_pin), min_pulse(_min_pulse), max_pulse(_max_pulse), speed(0)
+	pin(_pin), min_pulse(_min_pulse), max_pulse(_max_pulse), m_pulse(0)
 {
 	/*
 	 * According to https://www.arduino.cc/en/Reference/ServoAttach, attach() set min. pulse width to 544 microseconds
@@ -19,16 +19,19 @@ Motor::~Motor()
 
 void Motor::set_pulse(uint16_t pulse)
 {
-	if (pulse < min_pulse) pulse = min_pulse;
-	if (pulse > max_pulse) pulse = max_pulse;
+	if (pulse < min_pulse) 
+		pulse = min_pulse;
+	if (pulse > max_pulse) 
+		pulse = max_pulse;
+		
 	esc.writeMicroseconds(pulse);
 
-	speed = pulse;
+	m_pulse = pulse;
 }
 	
 uint16_t Motor::get_pulse()
 {
-	return speed;
+	return m_pulse;
 }
 
 
