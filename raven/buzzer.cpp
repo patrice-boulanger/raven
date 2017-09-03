@@ -16,6 +16,13 @@ int * melodies[] = {
         buz_ready
 };
 
+void buzzer_tone(uint16_t pulsation, uint16_t duration)
+{
+	tone(BUZZER_PIN, pulsation, duration);
+	delay(duration * 1.1);
+        noTone(BUZZER_PIN);
+}
+
 void buzzer_play(uint8_t melody)
 {
 	if (melody >= sizeof(melodies) / sizeof(melodies[0]))
