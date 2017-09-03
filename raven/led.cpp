@@ -7,12 +7,12 @@ int seq_len = 0, seq_pos = -1;
 
 void led_on(uint8_t pin)
 {
-	analogWrite(pin, 0);
+	analogWrite(pin, 255);
 }
 
 void led_off(uint8_t pin)
 {
-	analogWrite(pin, 255);
+	analogWrite(pin, 0);
 }
 
 void led_clear()
