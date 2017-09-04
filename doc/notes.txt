@@ -1,7 +1,11 @@
 TODO:
 
-. Overwrite configuration pid_sample is now an integer (not a float)
-. Test PID outputs with the SetSampleTime() and SetTunings() inverted: check w/ Serial.print
+. DONE: Overwrite configuration pid_sample is now an integer (not a float)
+. DONE: Test PID outputs with the SetSampleTime() and SetTunings() inverted: check w/ Serial.print
+
+. Need to stabilize data from MPU and Compass before moving forward ... 
+
+THEN:
 . Try a P-D-I tuning (increase P until oscillations appear, then damping w/ D , then improve w/ I):
   =>  https://oscarliang.com/quadcopter-pid-explained-tuning/
 . Implement TPA: throttle PID attenuation:
@@ -9,10 +13,15 @@ TODO:
 . Re-test proportionnal on measurement ?? with correct order of SetSampleTime() / SetTunnings()
 
 . MPU6050 Datasheet:
-  . Check values standard deviation while motors are running
-  . Attached the drone on a plane surface and push the motors up to 100% speed while monitoring with BT/minicom
-  . => this is the noise for the PID inputs and then ...
-  
+  . DONE: Check values standard deviation while motors are running
+  . DONE: Attached the drone on a plane surface and push the motors up to 100% speed while monitoring with BT/minicom
+  . DONE: => this is the noise for the PID inputs and then ...
+	
+	Pitch (sdev/max/min): 1.1559240592	3.4	-5.9
+	Roll (sdev/max/min): 2.6296088616	15.8	-14
+	  
+	while the drone was not moving AT ALL ... => refactoring of the board
+
 . HMC5883 Datasheet
   . Armoring to limit motors EM noise ... or refactoring 
   . Procedure for "SCALE FACTOR TEMPERATURE COMPENSATION" available
