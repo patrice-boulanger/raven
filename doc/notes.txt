@@ -1,5 +1,13 @@
 TODO:
 
+. Overwrite configuration pid_sample is now an integer (not a float)
+. Test PID outputs with the SetSampleTime() and SetTunings() inverted: check w/ Serial.print
+. Try a P-D-I tuning (increase P until oscillations appear, then damping w/ D , then improve w/ I):
+  =>  https://oscarliang.com/quadcopter-pid-explained-tuning/
+. Implement TPA: throttle PID attenuation:
+  => http://intofpv.com/t-what-is-tpa-in-cleanflight
+. Re-test proportionnal on measurement ?? with correct order of SetSampleTime() / SetTunnings()
+
 . MPU6050 Datasheet:
   . Check values standard deviation while motors are running
   . Attached the drone on a plane surface and push the motors at 100% speed while monitoring with BT/minicom
