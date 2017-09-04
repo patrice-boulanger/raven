@@ -10,7 +10,7 @@ TODO:
 
 . MPU6050 Datasheet:
   . Check values standard deviation while motors are running
-  . Attached the drone on a plane surface and push the motors at 100% speed while monitoring with BT/minicom
+  . Attached the drone on a plane surface and push the motors up to 100% speed while monitoring with BT/minicom
   . => this is the noise for the PID inputs and then ...
   
 . HMC5883 Datasheet
