@@ -20,7 +20,7 @@ const eeprom_config_t default_config = {
 	// Auto leveled mode settings
 	5.0f, 5.0f,		// pitch_max_angle, roll_max_angle
 	// PID sample in ms
-	9.0f,			
+	9,			
 	// PID yaw
 	0.0f, 0.0f,		// min/max values
 	0.0f, 0.0f, 0.0f, 	// Kp, Ki, Kd

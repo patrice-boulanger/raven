@@ -18,8 +18,8 @@ typedef struct {
 	float yaw_max_rate, pitch_max_rate, roll_max_rate;
 	// Auto leveled mode settings
 	float pitch_max_angle, roll_max_angle;
-	// PID settings
-	float pid_sample;
+	// PID sample time in ms
+	unsigned int pid_sample;
 	// PID yaw
 	float yaw_pid_min, yaw_pid_max;
 	float yaw_kp, yaw_ki, yaw_kd;
