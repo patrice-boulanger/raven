@@ -1,16 +1,13 @@
 TODO:
 
-NOT DONE . Measure voltage from BEC & SBUS (oscilloscope ?) before/after decoupling
-
-. DONE: Install a decoupling capacitor on the PDB
-. NOT DONE: Install a decoupling capacitor on the SBUS pin (?)
-. DONE: Install a decoupling capacitor between Vcc & GND on the sensor board 
-. Interesting information at http://rab.ict.pwr.wroc.pl/~mw/Files/AN1646.pdf
-
-. Serial:
-  . https://www.pjrc.com/teensy/td_uart.html
-  . Serial1 & 2 support 8 byte transmit and receive FIFOs, which allow for higher speed baud rates, even when other libraries create interrupt latency.
-  . DONE: Try to move from Serial3 to Serial1/2: swap PIN7 -> PIN(0/9) & PIN8 -> PIN(1/10) to see if it solves interference problem
+. MPU6050 Datasheet:
+  . Check values standard deviation while motors are running
+  . Attached the drone on a plane surface and push the motors at 100% speed while monitoring with BT/minicom
+  . => this is the noise for the PID inputs and then ...
+  
+. HMC5883 Datasheet
+  . Armoring to limit motors EM noise ... or refactoring 
+  . Procedure for "SCALE FACTOR TEMPERATURE COMPENSATION" available
 
 . BMP180:
   . From BMP085 datasheet:
@@ -35,31 +32,6 @@ NOT DONE . Measure voltage from BEC & SBUS (oscilloscope ?) before/after decoupl
       _bmp085Mode        = 0;
     #else
 
-  . DONE: Startup time before after power-up the device: 10ms
   . During operation, the device is sensitive to light. The hole in the top lid shall not be exposed to direct light during operation.
-  . DONE: 100nF between Vdd and GND for pullup resistors!
   
-. HMC5883 Datasheet
-  . DONE: Measurement Period, from receiving command to data ready: 6 ms
-  . DONE: Vdd is linked to GND via a 0.1µF capacitor for pullup resistors!
-  . The Table below shows all selectable output rates in continuous measurement mode. All three channels shall be measured within a given output rate
-  . With the data rate at the factory default of 15Hz updates, a 67 milli-second typical delay should be allowed by the I2C master before querying the HMC5883L data registers for new measurements. This is 33ms for 30Hz.
-  . DONE: ( ... ) or monitor status register or DRDY hardware interrupt pin (OK)
-  . Procedure for "SCALE FACTOR TEMPERATURE COMPENSATION" available
-
-. MPU6050 Datasheet:
-  . DONE: GYROSCOPE START-UP TIME: 30 ms
-  . Interrupt Status can report interesting information: getIntFreefallStatus()/getIntMotionStatus()/getIntZeroMotionStatus()
-
-. EEPROM:
-  . Configuration struct: embeds all settings needed for raven
-  . Functions: eeprom_load(struct *) & eeprom_save(struct *)
-  . Checksum 
-
-. Shell:
-  . User command
-  . get/set/show
-
-. Pinout diagram embedded in the drone (?)
-
  
