@@ -206,7 +206,8 @@ void setup()
 	pid_roll.SetOutputLimits(state.config.roll_pid_min, state.config.roll_pid_max);
 
         // Call SetSampleTime() before SetTunings() because the default sample time set in the constructor (100ms) 
-        // will be used to compute the values of the Ki/Kd coefficients, which will be 10 times greater than their values!
+        // will be used to compute the values of the Ki/Kd coefficients, which will be 10 times different than their values!
+        // See PID_v1.cpp lines 115-137 & lines 150-158.
         pid_yaw.SetSampleTime(state.config.pid_sample);
         pid_pitch.SetSampleTime(state.config.pid_sample);
         pid_roll.SetSampleTime(state.config.pid_sample);
