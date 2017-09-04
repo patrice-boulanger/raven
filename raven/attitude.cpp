@@ -34,7 +34,8 @@ void update_attitude(state_t *state, unsigned long micro)
 	// Compute SMA from MPU & compass raw values
 	for(int i = 0; i < SMA_BUFSZ; i ++) {
 
-                // Datasheet: divided by 16384 to have the value in g
+                // Datasheet: divide by 16384 to have the value in g
+                // Not useful here since we are only interested by the angle value
 		ax += state->sma.ax[i];
 		ay += state->sma.ay[i];
 		az += state->sma.az[i];
@@ -69,7 +70,6 @@ void update_attitude(state_t *state, unsigned long micro)
         float x_angle = RAD2DEG(atan2(ay, az));
         float y_angle = RAD2DEG(atan2(-ax, az));
 
-        
         // Gyroscope provides very accurate measurements but it tends to drift. The accelerometer is unstable, but does not drift.
         // Compute pitch and roll angles (deg) corrected w/ complementary filter.
         //state->attitude.roll = state->config.alpha * (state->attitude.roll + state->attitude.roll_rate * dt) + (1 - state->config.alpha) * x_angle; 
