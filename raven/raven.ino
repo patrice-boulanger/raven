@@ -205,13 +205,13 @@ void setup()
 	pid_pitch.SetOutputLimits(state.config.pitch_pid_min, state.config.pitch_pid_max);
 	pid_roll.SetOutputLimits(state.config.roll_pid_min, state.config.roll_pid_max);
 
+        pid_yaw.SetSampleTime(state.config.pid_sample);
+        pid_pitch.SetSampleTime(state.config.pid_sample);
+        pid_roll.SetSampleTime(state.config.pid_sample);
+
 	pid_yaw.SetTunings(state.config.yaw_kp, state.config.yaw_ki, state.config.yaw_kd);
 	pid_pitch.SetTunings(state.config.pitch_kp, state.config.pitch_ki, state.config.pitch_kd);
 	pid_roll.SetTunings(state.config.roll_kp, state.config.roll_ki, state.config.roll_kd);
-
-	pid_yaw.SetSampleTime(state.config.pid_sample);
-	pid_pitch.SetSampleTime(state.config.pid_sample);
-	pid_roll.SetSampleTime(state.config.pid_sample);
 
         mode = FLIGHT_MODE_AUTO_LEVEL;
 
