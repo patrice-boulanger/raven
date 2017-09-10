@@ -2,7 +2,7 @@
 #define _RAVEN_ATTITUDE_H
 
 // Buffer size for Simple Moving Average of MPU & compass raw values
-#define SMA_BUFSZ_BITS 	5
+#define SMA_BUFSZ_BITS 		2
 #define SMA_BUFSZ 		(1<<SMA_BUFSZ_BITS)
 
 /*

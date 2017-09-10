@@ -14,8 +14,8 @@
 #define RAVEN_VERSION "0.2.5"
 
 // LED PINS
-const uint8_t LED_GREEN_PIN = 5; // green
-const uint8_t LED_RED_PIN = 4;   // orange
+const uint8_t LED_GREEN_PIN = 5; // green / right
+const uint8_t LED_RED_PIN = 4;   // orange / left
 const uint8_t LED_WHITE_PIN = 3; // white
 
 // Buzzer

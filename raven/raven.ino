@@ -158,9 +158,9 @@ void setup()
 
 	// Initialize barometer
 	Serial.print(" barometer ");
-	state.barometer.initialize();
+//	state.barometer.initialize();
 	// Datasheet: startup time after power-up the device: 10ms
-	delay(10);
+//	delay(10);
 	
 	// Check connection w/ barometer
 	if (!state.barometer.testConnection()) {
@@ -193,6 +193,9 @@ void setup()
 	state.mpu.setXGyroOffset(state.config.off_gx);
 	state.mpu.setYGyroOffset(state.config.off_gy);
 	state.mpu.setZGyroOffset(state.config.off_gz);
+
+	// Enable Digital Low Pass Filter on the MPU against motors vibrations
+	state.mpu.setDLPFMode(MPU6050_DLPF_BW_5);
 	
 	// Gimbal settings
 	Serial.print(F("Gimbal dance ... "));
@@ -419,14 +422,14 @@ void loop()
         pulse_fr = pulse_fl = 1.02 * pulse_throttle;
         pulse_rr = pulse_rl = pulse_throttle;
         
-	// Adjust w/ PID outputs if motors are armed
+/*	// Adjust w/ PID outputs if motors are armed
 	if (armed) {
 		pulse_fr += - (int)(pitch_output) - (int)(roll_output); // - yaw_output;
 		pulse_rr += + (int)(pitch_output) - (int)(roll_output); // + yaw_output;
 		pulse_rl += + (int)(pitch_output) + (int)(roll_output); // - yaw_output;
 		pulse_fl += - (int)(pitch_output) + (int)(roll_output); // + yaw_output;
 	}
-	
+*/	
 	// Set the pulses for each motor
         esc_FR.set_pulse(pulse_fr);
         esc_FL.set_pulse(pulse_fl);
@@ -439,10 +442,11 @@ void loop()
 	led_update();
 
 	if (monitoring && millis() - mon_timer > 200) {
-		snprintf(mon_string, 80, "%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f",
-				state.attitude.pitch, pitch_setpoint, pitch_output,
-				state.attitude.roll, roll_setpoint, roll_output,
-				state.attitude.yaw_rate, state.attitude.heading_rate, yaw_setpoint, yaw_output);
+		snprintf(mon_string, 80, "%.1f,%.1f,%.1f,%.1f,%.1f", //,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f",
+				state.attitude.pitch,state.attitude.pitch_rate, //pitch_setpoint, pitch_output,
+				state.attitude.roll, state.attitude.roll_rate, //roll_setpoint, roll_output,
+				//state.attitude.yaw_rate, 
+				state.attitude.heading); //, yaw_setpoint, yaw_output);
 
 		Serial3.println(mon_string);
 		
