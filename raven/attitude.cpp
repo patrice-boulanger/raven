@@ -1,14 +1,14 @@
 #include "raven.h"
 #include "state.h"
 
-void get_raw_value(state_t *state)
+void update_sensors(state_t *state)
 {
 	// Read raw values & add them to the corresponding buffer
 	state->mpu.getAcceleration(&state->sma.ax[state->sma.pos], &state->sma.ay[state->sma.pos], &state->sma.az[state->sma.pos]);
 	state->mpu.getRotation(&state->sma.gx[state->sma.pos], &state->sma.gy[state->sma.pos], &state->sma.gz[state->sma.pos]);
 
-	while(!state->compass.getReadyStatus());
-	state->compass.getHeading(&state->sma.mx[state->sma.pos], &state->sma.my[state->sma.pos], &state->sma.mz[state->sma.pos]);
+//	while(!state->compass.getReadyStatus());
+//	state->compass.getHeading(&state->sma.mx[state->sma.pos], &state->sma.my[state->sma.pos], &state->sma.mz[state->sma.pos]);
 
 	// Move to the next slot in the buffer	
 	state->sma.pos = (state->sma.pos + 1) & (SMA_BUFSZ_BITS - 1);
