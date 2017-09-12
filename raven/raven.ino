@@ -242,7 +242,7 @@ void setup()
 		}
 
   		led_update();   
-			delay(10);
+		delay(10);
 	}
 
 	if (full_pitch_roll == 10) {
