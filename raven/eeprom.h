@@ -7,6 +7,8 @@
 typedef struct {
 	// Checksum
 	unsigned long chksum;
+	// Delay for Bluetooth monitoring
+	uint16_t mon_delay;
 	// Complementary filter coefficient
 	float alpha;
 	// MPU offsets

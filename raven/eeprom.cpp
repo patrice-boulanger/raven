@@ -8,8 +8,10 @@
 const eeprom_config_t default_config = {
 	// Checksum
 	0L,
+	// Delay for Bluetooth monitoring in ms
+	200,
 	// Complementary filter coefficient
-	0.96f,
+	0.90f,
 	// Calibration offsets: computed w/ I2Cdev IMU_Zero sketch
 	-989, -492, 1557,  	// accelerometer
 	  36,    1,   26,	// gyroscope 
@@ -25,11 +27,11 @@ const eeprom_config_t default_config = {
 	0.0f, 0.0f,		// min/max values
 	0.0f, 0.0f, 0.0f, 	// Kp, Ki, Kd
 	// PID pitch
-	-100.0f, 100.0f,	// min/max values
-	0.9f, 0.02f, 0.1f, 	// Kp, Ki, Kd
+	-36.0f, 36.0f,	// min/max values
+	1.1f, 0.0f, 0.1f, 	// Kp, Ki, Kd
 	// PID roll
-	-100.0f, 100.0f,	// min/max values
-	0.9f, 0.02f, 0.1f, 	// Kp, Ki, Kd
+	-36.0f, 36.0f,	// min/max values
+	1.1f, 0.0f, 0.1f, 	// Kp, Ki, Kd
 };
 
 /*
@@ -66,6 +68,9 @@ void eeprom_dump(const eeprom_config_t *conf, HardwareSerial *serial)
 {
 	serial->print("Checksum: 0x");
 	serial->println(conf->chksum, HEX);
+
+	serial->print("Monitoring delay (ms): ");
+	serial->println(conf->mon_delay);
 	
 	serial->print("Complementary filter coefficient: ");
 	serial->println(conf->alpha, 3);

@@ -378,7 +378,7 @@ void loop()
 	
 	led_update();
 
-	if (millis() - mon_timer > 200) {
+	if (millis() - mon_timer > state.config.mon_delay) {
 		snprintf(mon_string, 80, "%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f",
 				state.attitude.pitch, state.attitude.pitch_rate, pitch_setpoint, pitch_output,
 				state.attitude.roll, state.attitude.roll_rate ,roll_setpoint, roll_output);
