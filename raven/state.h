@@ -35,7 +35,7 @@ typedef struct {
 /*
  * Get raw values from sensors & add them to the SMA buffer
  */
-void get_raw_value(state_t *state);
+void update_sensors(state_t *state);
 
 /*
  * Update the attitude based on the configuration & the elapsed time in microseconds
