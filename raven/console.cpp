@@ -261,7 +261,7 @@ void process_line()
 		unsigned long now = millis();
 		
 		do {
-			get_raw_value(state);
+			update_sensors(state);
 			update_attitude(state, 10000);
 
 			if (millis() - now > delay_ms) {
