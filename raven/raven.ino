@@ -40,8 +40,7 @@ bool armed = false;
 float camera_pitch = 0;
 // Gimbal enable
 bool gimbal_enable = false;
-// Monitoring
-bool monitoring = false;
+// Bluetooth monitor
 unsigned long mon_timer;
 char mon_string[80];
 
@@ -140,7 +139,7 @@ void setup()
 	Serial.print("Init. & test devices: ");
 	
 	// Initialize compass
-	Serial.print("compass ");
+/*	Serial.print("compass ");
 	state.compass.initialize();
 	
 	// Check connection w/ compass
@@ -168,7 +167,7 @@ void setup()
 //		fail_forever();
 	} else 
 		Serial.print(F("ok,"));
-
+*/
 	// Initialize MPU
 	Serial.print(F(" MPU "));
 	state.mpu.initialize();
@@ -230,15 +229,13 @@ void setup()
 	Serial.println(F("Waiting for TX connection"));
 	Serial.println(F("Switch on the TX with full pitch/roll to start the Bluetooth console"));
 	
-        int cnt = 10, full_pitch_roll = 0, minus_pitch_roll = 0;
+        int cnt = 10, full_pitch_roll = 0;
         while(cnt != 0) {
 		if (xsr.readCal(&channels[0], &failSafe, &lostFrames) && !failSafe) {
 			cnt --;
 
 			if (channels[CHNL_PITCH] > 0.98 && channels[CHNL_ROLL] > 0.98)
 				full_pitch_roll ++;
-			else if (channels[CHNL_PITCH] < -0.98 && channels[CHNL_ROLL] < -0.98)
-				minus_pitch_roll ++;
 		}
 
   		led_update();   
@@ -258,17 +255,11 @@ void setup()
 		// Starts console on Serial3 == BT
 		Serial3.begin(57600);
 		start_console(Serial3, &state);
-	} else if (minus_pitch_roll == 10) {
-		buzzer_tone(880, 500);
-		delay(10);
-
+	} else {
 		// Starts monitoring on Serial3 == BT
 		Serial3.begin(57600);
-
-		monitoring= true;
 		mon_timer = millis();
-		
-	} else {
+
 		buzzer_tone(1760, 100);
 		delay(10);
 		buzzer_tone(1760, 100);
@@ -286,40 +277,6 @@ void setup()
 
         // Safety delay
 	delay(9);
-}
-
-// Dump all SBUS channels to serial
-void dump_channels()
-{
-		for(int i = 0; i < 7; i ++) {
-			Serial.print("Ch");
-			Serial.print(i);
-			Serial.print(": ");
-			Serial.print(channels[i]);
-			Serial.print(" ");
-		}
-
-		Serial.println();
-}
-
-// Dump attitude to serial
-void dump_attitude()
-{	
-	Serial.print(state.attitude.roll_rate, 2);
-	Serial.print(", ");
-	Serial.print(state.attitude.pitch_rate, 2);
-	Serial.print(", ");
-	Serial.print(state.attitude.yaw_rate, 2);
-	Serial.print(", ");
-	Serial.print(state.attitude.pitch);
-	Serial.print(", ");
-	Serial.print(state.attitude.roll);
-	Serial.print(", ");
-	Serial.print(state.attitude.heading, 2);
-	Serial.print(", ");
-	Serial.print(state.attitude.heading_rate);
-	
-	Serial.println("");
 }
 
 /* ----- Main loop ----- */
@@ -367,18 +324,9 @@ void loop()
 	}
 
 	// Refresh drone attitude
-	get_raw_value(&state);	
+	update_sensors(&state);	
 	update_attitude(&state, dt);
 	
-	
-	/* PID outputs reaction & pulses evolution
-	 *  
-	 * | When               | output sign is         | 
-	 * -----------------------------------------------
-	 * | roll right / left  | roll_output  < 0 / > 0 |
-	 * | pitch front / rear | pitch_output < 0 / > 0 | 
-	 * | yaw_right / left   | yaw_output   < 0 / > 0 |
-	 */
 	yaw_setpoint = 0;
 	pitch_setpoint = 0;
 	roll_setpoint = 0;
@@ -407,29 +355,18 @@ void loop()
 	pid_pitch.Compute();
 	pid_roll.Compute();
 
-	/* 
-	 *  Adapt pulses of each motor using the following rules:
-	 * 
-	 *  pitch_output < 0 -> nose dips      -> front motors speed increases & rear motors speed decreases
-	 *  pitch_output > 0 -> nose raises up -> front motors speed decreases & rear motors speed increases
-	 *   roll_output < 0 -> rolls right    -> left motors speed increases & right motors speed decreases
-	 *   roll_output > 0 -> rolls left     -> left motors speed decreases & right motors speed increases
-	 *    yaw_output < 0 -> rotate right   -> front-right/rear-left motors speed increases & front-left/rear-right motors speed decreases
-	 *    yaw_output > 0 -> rotate left    -> front-right/rear-left motors speed decreases & front-left/rear-right motors speed increases
-	 */
-	
         // Initialize all pulses w/ base pulse
         pulse_fr = pulse_fl = 1.02 * pulse_throttle;
         pulse_rr = pulse_rl = pulse_throttle;
         
-/*	// Adjust w/ PID outputs if motors are armed
+	// Adjust w/ PID outputs if motors are armed
 	if (armed) {
 		pulse_fr += - (int)(pitch_output) - (int)(roll_output); // - yaw_output;
 		pulse_rr += + (int)(pitch_output) - (int)(roll_output); // + yaw_output;
 		pulse_rl += + (int)(pitch_output) + (int)(roll_output); // - yaw_output;
 		pulse_fl += - (int)(pitch_output) + (int)(roll_output); // + yaw_output;
 	}
-*/	
+	
 	// Set the pulses for each motor
         esc_FR.set_pulse(pulse_fr);
         esc_FL.set_pulse(pulse_fl);
@@ -441,12 +378,10 @@ void loop()
 	
 	led_update();
 
-	if (monitoring && millis() - mon_timer > 200) {
-		snprintf(mon_string, 80, "%.1f,%.1f,%.1f,%.1f,%.1f", //,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f",
-				state.attitude.pitch,state.attitude.pitch_rate, //pitch_setpoint, pitch_output,
-				state.attitude.roll, state.attitude.roll_rate, //roll_setpoint, roll_output,
-				//state.attitude.yaw_rate, 
-				state.attitude.heading); //, yaw_setpoint, yaw_output);
+	if (millis() - mon_timer > 200) {
+		snprintf(mon_string, 80, "%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f",
+				state.attitude.pitch, state.attitude.pitch_rate, pitch_setpoint, pitch_output,
+				state.attitude.roll, state.attitude.roll_rate ,roll_setpoint, roll_output);
 
 		Serial3.println(mon_string);
 		
