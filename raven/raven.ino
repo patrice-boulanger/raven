@@ -66,9 +66,16 @@ int16_t pulse_fr, pulse_fl, pulse_rr, pulse_rl;
 unsigned long timer = 0;
 
 // Declare the PID at the end since they need to refer to previously declared variables
-PID pid_yaw(&state.attitude.heading_rate, &yaw_output, &yaw_setpoint, 0, 0, 0, P_ON_E, DIRECT);
-PID pid_roll(&state.attitude.roll, &roll_output, &roll_setpoint, 0, 0, 0, P_ON_E, DIRECT);
-PID pid_pitch(&state.attitude.pitch, &pitch_output, &pitch_setpoint, 0, 0, 0, P_ON_E, DIRECT);
+
+// PID for auto-level mode
+PID pid_yaw_auto(&state.attitude.yaw_rate, &yaw_output, &yaw_setpoint, 0, 0, 0, P_ON_E, DIRECT);
+PID pid_pitch_auto(&state.attitude.pitch, &pitch_output, &pitch_setpoint, 0, 0, 0, P_ON_E, DIRECT);
+PID pid_roll_auto(&state.attitude.roll, &roll_output, &roll_setpoint, 0, 0, 0, P_ON_E, DIRECT);
+
+// PID for acro mode
+PID pid_yaw_acro(&state.attitude.yaw_rate, &yaw_output, &yaw_setpoint, 0, 0, 0, P_ON_E, DIRECT);
+PID pid_pitch_acro(&state.attitude.pitch_rate, &pitch_output, &pitch_setpoint, 0, 0, 0, P_ON_E, DIRECT);
+PID pid_roll_acro(&state.attitude.roll_rate, &roll_output, &roll_setpoint, 0, 0, 0, P_ON_E, DIRECT);
 
 /* ----- Dead-end ----- */
 void fail_forever()
@@ -203,22 +210,41 @@ void setup()
 	Serial.println(F("done"));
 	
         // Configure flight controller
-	pid_yaw.SetOutputLimits(state.config.yaw_pid_min, state.config.yaw_pid_max);
-	pid_pitch.SetOutputLimits(state.config.pitch_pid_min, state.config.pitch_pid_max);
-	pid_roll.SetOutputLimits(state.config.roll_pid_min, state.config.roll_pid_max);
+
+        // Auto-level mode PID
+	pid_yaw_auto.SetOutputLimits(state.config.yaw_pid_min, state.config.yaw_pid_max);
+	pid_pitch_auto.SetOutputLimits(state.config.pitch_pid_min, state.config.pitch_pid_max);
+	pid_roll_auto.SetOutputLimits(state.config.roll_pid_min, state.config.roll_pid_max);
 
         // Call SetSampleTime() before SetTunings() because the default sample time set in the constructor (100ms) 
         // will be used to compute the values of the Ki/Kd coefficients, which will be 10 times different than their values!
         // See PID_v1.cpp lines 115-137 & lines 150-158.
-        pid_yaw.SetSampleTime(state.config.pid_sample);
-        pid_pitch.SetSampleTime(state.config.pid_sample);
-        pid_roll.SetSampleTime(state.config.pid_sample);
+        pid_yaw_auto.SetSampleTime(state.config.pid_sample);
+        pid_pitch_auto.SetSampleTime(state.config.pid_sample);
+        pid_roll_auto.SetSampleTime(state.config.pid_sample);
 
-	pid_yaw.SetTunings(state.config.yaw_kp, state.config.yaw_ki, state.config.yaw_kd);
-	pid_pitch.SetTunings(state.config.pitch_kp, state.config.pitch_ki, state.config.pitch_kd);
-	pid_roll.SetTunings(state.config.roll_kp, state.config.roll_ki, state.config.roll_kd);
+	pid_yaw_auto.SetTunings(state.config.yaw_kp, state.config.yaw_ki, state.config.yaw_kd);
+	pid_pitch_auto.SetTunings(state.config.pitch_kp, state.config.pitch_ki, state.config.pitch_kd);
+	pid_roll_auto.SetTunings(state.config.roll_kp, state.config.roll_ki, state.config.roll_kd);
 
-        mode = FLIGHT_MODE_AUTO_LEVEL;
+        // Acrobatic mode PID
+	pid_yaw_acro.SetOutputLimits(state.config.yaw_pid_min, state.config.yaw_pid_max);
+	pid_pitch_acro.SetOutputLimits(state.config.pitch_pid_min, state.config.pitch_pid_max);
+	pid_roll_acro.SetOutputLimits(state.config.roll_pid_min, state.config.roll_pid_max);
+
+        // Call SetSampleTime() before SetTunings() because the default sample time set in the constructor (100ms) 
+        // will be used to compute the values of the Ki/Kd coefficients, which will be 10 times different than their values!
+        // See PID_v1.cpp lines 115-137 & lines 150-158.
+        pid_yaw_acro.SetSampleTime(state.config.pid_sample);
+        pid_pitch_acro.SetSampleTime(state.config.pid_sample);
+        pid_roll_acro.SetSampleTime(state.config.pid_sample);
+
+	pid_yaw_acro.SetTunings(state.config.yaw_kp, state.config.yaw_ki, state.config.yaw_kd);
+	pid_pitch_acro.SetTunings(state.config.pitch_kp, state.config.pitch_ki, state.config.pitch_kd);
+	pid_roll_acro.SetTunings(state.config.roll_kp, state.config.roll_ki, state.config.roll_kd);
+
+        //mode = FLIGHT_MODE_AUTO_LEVEL;
+        mode = FLIGHT_MODE_ACRO;
 
 	// Blinking green led while waiting for the transmitter
 	led_sequence("G___g________________");
@@ -303,9 +329,15 @@ void loop()
 		if (armed) {
 			if (armed != armed_prev) {
 				// Activate PID
-				pid_yaw.SetMode(AUTOMATIC);
-				pid_pitch.SetMode(AUTOMATIC);
-				pid_roll.SetMode(AUTOMATIC);
+				if (mode == FLIGHT_MODE_AUTO_LEVEL) {
+					pid_yaw_auto.SetMode(AUTOMATIC);
+					pid_pitch_auto.SetMode(AUTOMATIC);
+					pid_roll_auto.SetMode(AUTOMATIC);
+				} else if (mode == FLIGHT_MODE_ACRO) {
+					pid_yaw_acro.SetMode(AUTOMATIC);
+					pid_pitch_acro.SetMode(AUTOMATIC);
+					pid_roll_acro.SetMode(AUTOMATIC);
+				}
 			}
 			
 			// Translate throttle command from [-1;1] -> [0;1]
@@ -314,9 +346,15 @@ void loop()
 		} else {
 			if (armed != armed_prev) {
 				// Disable PID			
-				pid_yaw.SetMode(MANUAL);
-				pid_pitch.SetMode(MANUAL);
-				pid_roll.SetMode(MANUAL);
+				if (mode == FLIGHT_MODE_AUTO_LEVEL) {
+					pid_yaw_auto.SetMode(MANUAL);
+					pid_pitch_auto.SetMode(MANUAL);
+					pid_roll_auto.SetMode(MANUAL);
+				} else if (mode == FLIGHT_MODE_ACRO) {
+					pid_yaw_acro.SetMode(MANUAL);
+					pid_pitch_acro.SetMode(MANUAL);
+					pid_roll_acro.SetMode(MANUAL);
+				}
 			}
 					
 			pulse_throttle = ESC_PULSE_MIN_WIDTH;
@@ -341,30 +379,34 @@ void loop()
 		
 	        if (abs(channels[CHNL_ROLL]) > 0.02) 	
 	        	roll_setpoint = round(channels[CHNL_ROLL] * state.config.roll_max_angle);
-			
+
+        	// Compute PID compensation
+		pid_yaw_auto.Compute();
+		pid_pitch_auto.Compute();
+		pid_roll_auto.Compute();
+					
 	} else if (mode == FLIGHT_MODE_ACRO) {
 		if (abs(channels[CHNL_PITCH]) > 0.02) 
 			pitch_setpoint = channels[CHNL_PITCH] * state.config.pitch_max_rate;
 
 	        if (abs(channels[CHNL_ROLL]) > 0.02) 	
 			roll_setpoint = channels[CHNL_ROLL] * state.config.roll_max_rate;
+
+        	// Compute PID compensation
+		pid_yaw_acro.Compute();
+		pid_pitch_acro.Compute();
+		pid_roll_acro.Compute();
 	}
 
-	// Compute PID compensation
-	pid_yaw.Compute();
-	pid_pitch.Compute();
-	pid_roll.Compute();
-
         // Initialize all pulses w/ base pulse
-        pulse_fr = pulse_fl = 1.02 * pulse_throttle;
-        pulse_rr = pulse_rl = pulse_throttle;
+        pulse_fr = pulse_fl = pulse_rr = pulse_rl = pulse_throttle;
         
 	// Adjust w/ PID outputs if motors are armed
 	if (armed) {
-		pulse_fr += - (int)(pitch_output) - (int)(roll_output); // - yaw_output;
-		pulse_rr += + (int)(pitch_output) - (int)(roll_output); // + yaw_output;
-		pulse_rl += + (int)(pitch_output) + (int)(roll_output); // - yaw_output;
-		pulse_fl += - (int)(pitch_output) + (int)(roll_output); // + yaw_output;
+		pulse_fr += + (int)yaw_output - (int)(pitch_output) - (int)(roll_output);
+		pulse_rr += - (int)yaw_output + (int)(pitch_output) - (int)(roll_output);
+		pulse_rl += + (int)yaw_output + (int)(pitch_output) + (int)(roll_output);
+		pulse_fl += - (int)yaw_output - (int)(pitch_output) + (int)(roll_output);
 	}
 	
 	// Set the pulses for each motor
@@ -379,9 +421,11 @@ void loop()
 	led_update();
 
 	if (millis() - mon_timer > state.config.mon_delay) {
-		snprintf(mon_string, 80, "%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f",
-				state.attitude.pitch, state.attitude.pitch_rate, pitch_setpoint, pitch_output,
-				state.attitude.roll, state.attitude.roll_rate ,roll_setpoint, roll_output);
+		snprintf(mon_string, 80, "%.1f,%.1f,%d,%.1f,%.1f,%d,%.1f,%d",
+				state.attitude.pitch, state.attitude.pitch_rate, (int)pitch_output,
+				state.attitude.roll, state.attitude.roll_rate, (int)roll_output,
+				state.attitude.yaw_rate, (int)yaw_output);
+		
 
 		Serial3.println(mon_string);
 		
