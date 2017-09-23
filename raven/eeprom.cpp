@@ -24,14 +24,14 @@ const eeprom_config_t default_config = {
 	// PID sample in ms
 	9,			
 	// PID yaw
-	0.0f, 0.0f,		// min/max values
-	0.0f, 0.0f, 0.0f, 	// Kp, Ki, Kd
+	-400.0f, 400.0f,	// min/max values
+	4.0f, 0.02f, 0.0f, 	// Kp, Ki, Kd
 	// PID pitch
-	-36.0f, 36.0f,	// min/max values
-	1.1f, 0.0f, 0.1f, 	// Kp, Ki, Kd
+	-400.0f, 400.0f,	// min/max values
+	0.0f, 0.0f, 5.0f, 	// Kp, Ki, Kd
 	// PID roll
-	-36.0f, 36.0f,	// min/max values
-	1.1f, 0.0f, 0.1f, 	// Kp, Ki, Kd
+	-400.0f, 400.0f,	// min/max values
+	0.0f, 0.0f, 5.0f, 	// Kp, Ki, Kd
 };
 
 /*
