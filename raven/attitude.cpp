@@ -62,10 +62,13 @@ void update_attitude(state_t *state, unsigned long micro)
 	mz = (mz >> SMA_BUFSZ_BITS);
 	
 	// Angular speeds from gyro (deg.s-1)
-	state->attitude.roll_rate = gx / 131.0;
-        state->attitude.pitch_rate = gy / 131.0;
-        state->attitude.yaw_rate = gz / 131.0;
-
+	// Apply a complementary filter to reduce noise
+	double gyro_yaw = (double)(gz) / 131.0, gyro_pitch = (double)(gy) / 131.0, gyro_roll = (double)(gx) / 131.0;
+        
+        state->attitude.roll_rate = gyro_roll + state->config.alpha * (state->attitude.roll_rate - gyro_roll);
+        state->attitude.pitch_rate = gyro_pitch + state->config.alpha * (state->attitude.pitch_rate - gyro_pitch);
+	state->attitude.yaw_rate = gyro_yaw + state->config.alpha * (state->attitude.yaw_rate - gyro_yaw);
+	
         // Orientation of the accelerometer relative to the earth (deg.)
         float x_angle = RAD2DEG(atan2(ay, az));
         float y_angle = RAD2DEG(atan2(-ax, az));

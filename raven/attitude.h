@@ -22,7 +22,7 @@ typedef struct {
  */
 typedef struct {
 	double pitch, roll;			// pitch/roll angles (deg)
-	float roll_rate, pitch_rate, yaw_rate;	// angular speeds on axis (deg.s-1)
+	double roll_rate, pitch_rate, yaw_rate;	// angular speeds on axis (deg.s-1)
 
 	double heading;				// heading (deg)
 	double heading_rate;			// heading angular speed (deg.s-1)
